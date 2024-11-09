@@ -1,0 +1,7 @@
+[package]
+name = "raytracer-cli"
+version = "0.1.0"
+
+[dependencies]
+raytracer-lib = { path = "../raytracer-lib" }
+clap = "4.0"
