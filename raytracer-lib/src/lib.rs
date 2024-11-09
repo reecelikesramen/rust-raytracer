@@ -6,5 +6,8 @@ extern crate approx;
 use crate::prelude::*;
 
 mod prelude;
-pub mod framebuffer;
-pub mod math;
+mod math;
+mod camera;
+mod framebuffer;
+
+pub use framebuffer::Framebuffer;

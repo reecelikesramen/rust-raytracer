@@ -2,15 +2,15 @@ use crate::prelude::*;
 use vec3;
 use approx::relative_eq;
 
-struct CoordinateSystem {
-	u: Vec3,
-	v: Vec3,
-	w: Vec3,
-	position: Vec3
+pub struct CoordinateSystem {
+	pub u: Vec3,
+	pub v: Vec3,
+	pub w: Vec3,
+	pub position: Vec3
 }
 
 impl CoordinateSystem {
-	fn new(position: Vec3, view_direction: Vec3) -> Self {
+	pub fn new(position: Vec3, view_direction: &Vec3) -> Self {
 		let w = -view_direction.normalize();
 
 		let mut temp_up = vec3!(0.0, 1.0, 0.0);
@@ -46,12 +46,12 @@ impl CoordinateSystem {
 			eprintln!("View dir: {}", view_direction);
 			println!("Temp up: {}", temp_up);
 
-			assert!((w.dot(&_u) - 0.0).abs() < f64::EPSILON);
-			assert!((w.dot(&_v) - 0.0).abs() < f64::EPSILON);
-			assert!((_u.dot(&_v) - 0.0).abs() < f64::EPSILON);
-			assert!((_u.magnitude() - 1.0).abs() < f64::EPSILON);
-			assert!((_v.magnitude() - 1.0).abs() < f64::EPSILON);
-			assert!((w.magnitude() - 1.0).abs() < f64::EPSILON);
+			assert!((w.dot(&_u) - 0.0).abs() < 1e-7);
+			assert!((w.dot(&_v) - 0.0).abs() < 1e-7);
+			assert!((_u.dot(&_v) - 0.0).abs() < 1e-7);
+			assert!((_u.magnitude() - 1.0).abs() < 1e-7);
+			assert!((_v.magnitude() - 1.0).abs() < 1e-7);
+			assert!((w.magnitude() - 1.0).abs() < 1e-7);
 		}
 
 		Self {

@@ -2,7 +2,7 @@ use crate::prelude::*;
 use color;
 
 #[derive(Clone)]
-struct Framebuffer {
+pub struct Framebuffer {
 	width: u32,
 	height: u32,
 	pixels: Vec<Color>
