@@ -1,0 +1,10 @@
+[package]
+name = "raytracer-lib"
+version = "0.1.0"
+
+
+[dependencies]
+nalgebra = "0.33"
+
+[lib]
+crate-type = ["rlib", "cdylib"]  # To enable usage as a library in WASM
