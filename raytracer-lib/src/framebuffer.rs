@@ -1,9 +1,11 @@
-use Vec3f;
+use crate::prelude::*;
+use color;
 
+#[derive(Clone)]
 struct Framebuffer {
 	width: u32,
 	height: u32,
-	pixels: Vec<Vec3f>
+	pixels: Vec<Color>
 }
 
 impl Framebuffer {
@@ -12,16 +14,7 @@ impl Framebuffer {
 		Self {
 			width,
 			height,
-			pixels: vec![Vec3f::new(0.0, 0.0, 0.0); (width * height) as usize]
-		}
-	}
-
-	// copy from another framebuffer
-	pub fn copy(other: &Framebuffer) -> Self {
-		Self {
-			width: other.width,
-			height: other.height,
-			pixels: other.pixels.clone()
+			pixels: vec![color!(0.0, 0.0, 0.0); (width * height) as usize]
 		}
 	}
 
@@ -31,13 +24,13 @@ impl Framebuffer {
 	}
 
 	// set pixel
-	pub fn set_pixel(&mut self, i: u32, j: u32, color: Vec3f) {
+	pub fn set_pixel(&mut self, i: u32, j: u32, color: Color) {
 		let idx = self.index(i, j);
 		self.pixels[idx] = color;
 	}
 
 	// clear color
-	pub fn clear_color(&mut self, color: Vec3f) {
+	pub fn clear_color(&mut self, color: Color) {
 		for pixel in self.pixels.iter_mut() {
 			*pixel = color;
 		}
