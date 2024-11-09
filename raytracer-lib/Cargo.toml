@@ -5,6 +5,12 @@ version = "0.1.0"
 
 [dependencies]
 nalgebra = "0.33"
+approx = "0.5"
+
+[features]
+default = ["f64"]
+f64 = []
+f32 = []
 
 [lib]
 crate-type = ["rlib", "cdylib"]  # To enable usage as a library in WASM
