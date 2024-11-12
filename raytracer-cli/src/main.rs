@@ -7,7 +7,7 @@ extern crate clap;
 extern crate indicatif;
 extern crate raytracer_lib;
 use clap::Parser;
-use raytracer_lib::{example_scene, render, Framebuffer, Scene};
+use raytracer_lib::{load_scene, render, Framebuffer, Scene};
 
 #[derive(Parser, Debug)]
 #[command(author = "Reece Holmdahl", version = None, about="Raytracer CLI", long_about = None)]
@@ -16,6 +16,8 @@ struct RayTracerArgs {
     width: u32,
     #[arg(short = 'y', long = "height", default_value_t = 360)]
     height: u32,
+    #[arg(short='i', long = "scene-path")]
+    scene_path: String,
     #[arg(short = 'o', long = "output", default_value = "out.png")]
     output_path: String,
     #[arg(short = 'r', long = "rays-per-pixel", default_value_t = 4)]
@@ -27,11 +29,17 @@ struct RayTracerArgs {
 fn main() {
     let args = RayTracerArgs::parse();
     println!("{:?}", args);
-    let scene: Scene = example_scene(args.width, args.height);
+
+    let scene = load_scene(&args.scene_path);
+    println!("{:?}", scene);
+    return;
+
     let pb = indicatif::ProgressBar::new(args.width as u64 * args.height as u64);
-    let per_pixel_cb = || { pb.inc(1); };
+    let per_pixel_cb = || {
+        pb.inc(1);
+    };
     let fb = render(
-        &scene,
+        todo!(),
         args.width,
         args.height,
         args.rays_per_pixel,

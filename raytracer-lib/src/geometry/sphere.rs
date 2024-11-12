@@ -15,7 +15,7 @@ pub struct Sphere<'a> {
 }
 
 impl<'a> Sphere<'a> {
-    pub fn new(center: Vec3, radius: Real) -> Self {
+    pub fn new(center: Vec3, radius: Real, shader: &'a dyn Shader) -> Self {
         Self {
             center,
             radius,
@@ -23,7 +23,7 @@ impl<'a> Sphere<'a> {
                 center - vec3!(radius, radius, radius),
                 center + vec3!(radius, radius, radius),
             ),
-            shader: &NULL_SHADER,
+            shader,
             name: "unnamed sphere",
         }
     }

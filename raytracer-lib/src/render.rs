@@ -13,6 +13,7 @@ static NOP_CB: fn() -> () = || {};
 pub fn render<'scene>(scene: &'scene Scene, width: u32, height: u32, rays_per_pixel: u16, recursion_depth: u16, per_pixel_cb: Option<&dyn Fn() -> ()>) -> Framebuffer {
 	let cb = per_pixel_cb.unwrap_or(&NOP_CB);
 	let mut fb = Framebuffer::new(width, height);
+	let mut hits = 0;
 	for i in 0..width {
 		for j in 0..height {
 			// TODO: implement rpp and anti-aliasing
@@ -21,6 +22,7 @@ pub fn render<'scene>(scene: &'scene Scene, width: u32, height: u32, rays_per_pi
 			let (di, dj) = (0.5, 0.5);
 			let ray = scene.camera.generate_ray(i, j, di, dj);
 			let mut hit = Hit::new();
+			hit.ray = ray;
 
 			// TODO: scene.closestHit
 			for shape in &scene.shapes {
@@ -31,6 +33,7 @@ pub fn render<'scene>(scene: &'scene Scene, width: u32, height: u32, rays_per_pi
 					// 		print!("sphere!")
 					// 	}
 					// }
+					hits += 1;
 					color += hit.shape.unwrap().get_shader().apply(&hit)
 				}
 			}
@@ -39,6 +42,8 @@ pub fn render<'scene>(scene: &'scene Scene, width: u32, height: u32, rays_per_pi
 			fb.set_pixel(i, j, color);
 		}
 	}
+
+	println!("Hits: {}", hits);
 
 	fb
 }
