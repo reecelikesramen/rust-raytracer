@@ -1,2 +1,5 @@
 cpp
 target
+.aider*
+*.png
+.DS_Store
