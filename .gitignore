@@ -3,3 +3,4 @@ target
 .aider*
 *.png
 .DS_Store
+.env

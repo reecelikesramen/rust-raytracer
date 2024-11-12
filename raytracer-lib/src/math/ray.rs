@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Ray {
 	pub origin: Vec3,
 	pub direction: Vec3
