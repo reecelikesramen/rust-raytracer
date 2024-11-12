@@ -1,14 +1,14 @@
 use crate::math::Ray;
 use crate::prelude::*;
-use crate::camera::camera::*;
+use super::*;
 
-struct PerspectiveCamera {
+pub struct PerspectiveCamera {
 	base: CameraBase,
 	focal_length: Real
 }
 
 impl PerspectiveCamera {
-	fn new(position: Vec3, view_direction: &Vec3, aspect_ratio: Real, focal_length: Real) -> Self {
+	pub fn new(position: Vec3, view_direction: &Vec3, aspect_ratio: Real, focal_length: Real) -> Self {
 		Self {
 			base: CameraBase::new(position, view_direction, aspect_ratio),
 			focal_length
@@ -23,8 +23,6 @@ impl Camera for PerspectiveCamera {
 		Ray { origin: self.base.basis.position, direction }
 	}
 
-	fn set_image_pixels(&mut self, pixels_x: u32, pixels_y: u32) {
-		self.base.pixels_x = pixels_x;
-		self.base.pixels_y = pixels_y;
-	}
+	fn camera_base(&self) -> &CameraBase { &self.base }
+	fn camera_base_mut(&mut self) -> &mut CameraBase { &mut self.base }
 }

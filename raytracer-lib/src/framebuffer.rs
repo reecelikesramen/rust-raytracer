@@ -3,9 +3,9 @@ use color;
 
 #[derive(Clone)]
 pub struct Framebuffer {
-	width: u32,
-	height: u32,
-	pixels: Vec<Color>
+	pub width: u32,
+	pub height: u32,
+	pub pixels: Vec<Color>
 }
 
 impl Framebuffer {
@@ -27,6 +27,11 @@ impl Framebuffer {
 	pub fn set_pixel(&mut self, i: u32, j: u32, color: Color) {
 		let idx = self.index(i, j);
 		self.pixels[idx] = color;
+	}
+
+	// get pixel
+	pub fn get_pixel(&self, i: u32, j: u32) -> Color {
+		self.pixels[self.index(i, j)]
 	}
 
 	// clear color
