@@ -54,7 +54,7 @@ impl<'a> super::Shape<'a> for Sphere<'a> {
         self.shader
     }
 
-    fn closest_hit(&self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit) -> bool {
+    fn closest_hit<'hit>(&'hit self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit<'hit>) -> bool {
         let center_to_origin = ray.origin - self.center; // vector from center of sphere to ray origin
         let d = ray.direction;
         let discriminant = center_to_origin.dot(&d).powi(2)
