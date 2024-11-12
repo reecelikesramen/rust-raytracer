@@ -1,17 +1,17 @@
 use crate::{math::Ray, prelude::*};
 
-pub struct Hit<'a> {
+pub struct Hit<'shape> {
 	pub t: Real,
 	pub t_min: Real,
 	pub t_max: Real,
 	pub depth: u16,
 	pub ray: crate::math::Ray,
 	pub normal: Vec3,
-	pub shape: Option<&'a dyn crate::geometry::Shape<'a>>,
+	pub shape: Option<&'shape dyn crate::geometry::Shape<'shape>>,
 	// scene: &Scene
 }
 
-impl<'a> Hit<'a> {
+impl<'shape> Hit<'shape> {
 	pub fn new() -> Self {
 		Self {
 			t: INFINITY,

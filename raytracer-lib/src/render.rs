@@ -10,7 +10,7 @@ use color;
 
 static NOP_CB: fn() -> () = || {};
 
-pub fn render<'a>(scene: &Scene, width: u32, height: u32, rays_per_pixel: u16, recursion_depth: u16, per_pixel_cb: Option<&'a dyn Fn() -> ()>) -> Framebuffer {
+pub fn render<'scene>(scene: &'scene Scene, width: u32, height: u32, rays_per_pixel: u16, recursion_depth: u16, per_pixel_cb: Option<&dyn Fn() -> ()>) -> Framebuffer {
 	let cb = per_pixel_cb.unwrap_or(&NOP_CB);
 	let mut fb = Framebuffer::new(width, height);
 	for i in 0..width {
