@@ -20,5 +20,5 @@ pub trait Shape<'a> {
     fn get_bbox(&self) -> &bbox::BBox;
     fn get_centroid(&self) -> Vec3;
     fn get_shader(&self) -> &'a dyn crate::shader::Shader;
-    fn closest_hit(&self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit) -> bool;
+    fn closest_hit<'hit>(&'hit self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit<'hit>) -> bool;
 }
