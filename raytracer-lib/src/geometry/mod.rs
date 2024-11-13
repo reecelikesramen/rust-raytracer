@@ -14,11 +14,11 @@ pub enum ShapeType {
     Mesh,
 }
 
-pub trait Shape<'a> {
+pub trait Shape: Send + Sync {
     fn get_type(&self) -> ShapeType;
     fn get_name(&self) -> &str;
     fn get_bbox(&self) -> &bbox::BBox;
     fn get_centroid(&self) -> Vec3;
-    fn get_shader(&self) -> &'a dyn crate::shader::Shader;
+    fn get_shader(&self) -> std::sync::Arc<dyn crate::shader::Shader>;
     fn closest_hit<'hit>(&'hit self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit<'hit>) -> bool;
 }

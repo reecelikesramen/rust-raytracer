@@ -1,4 +1,6 @@
-use super::{BBox, ShapeType};
+use std::sync::Arc;
+
+use super::{BBox, Shape, ShapeType};
 use crate::prelude::*;
 use crate::shader::{NullShader, Shader};
 use approx::relative_eq;
@@ -6,16 +8,16 @@ use vec3;
 
 static NULL_SHADER: NullShader = NullShader {};
 
-pub struct Sphere<'a> {
+pub struct Sphere {
     center: Vec3,
     radius: Real,
     bbox: BBox,
-    shader: &'a dyn Shader,
-    name: &'a str,
+    shader: Arc<dyn Shader>,
+    name: &'static str,
 }
 
-impl<'a> Sphere<'a> {
-    pub fn new(center: Vec3, radius: Real, shader: &'a dyn Shader) -> Self {
+impl Sphere {
+    pub fn new(center: Vec3, radius: Real, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         Self {
             center,
             radius,
@@ -24,7 +26,7 @@ impl<'a> Sphere<'a> {
                 center + vec3!(radius, radius, radius),
             ),
             shader,
-            name: "unnamed sphere",
+            name,
         }
     }
 
@@ -33,7 +35,7 @@ impl<'a> Sphere<'a> {
     }
 }
 
-impl<'a> super::Shape<'a> for Sphere<'a> {
+impl Shape for Sphere {
     fn get_type(&self) -> ShapeType {
         ShapeType::Sphere
     }
@@ -50,7 +52,7 @@ impl<'a> super::Shape<'a> for Sphere<'a> {
         self.center
     }
 
-    fn get_shader(&self) -> &'a dyn Shader {
+    fn get_shader(&self) -> Arc<dyn Shader> {
         self.shader
     }
 
