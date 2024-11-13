@@ -24,13 +24,15 @@ struct RayTracerArgs {
     rays_per_pixel: u16,
     #[arg(short = 'd', long = "recursion-depth", default_value_t = 4)]
     recursion_depth: u16,
+    #[arg(long = "aspect-ratio", default_value_t = 1.0)]
+    aspect_ratio: f64,
 }
 
 fn main() {
     let args = RayTracerArgs::parse();
     println!("{:?}", args);
 
-    let scene = load_scene(&args.scene_path);
+    let scene = load_scene(&args.scene_path, args.width, args.height, args.aspect_ratio).unwrap();
     println!("{:?}", scene);
     return;
 

@@ -4,3 +4,4 @@ target
 *.png
 .DS_Store
 .env
+testing.ipynb
