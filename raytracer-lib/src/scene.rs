@@ -1,5 +1,5 @@
-use crate::prelude::*;
-use std::str::FromStr;
+use crate::{camera::{OrthographicCamera, PerspectiveCamera}, geometry::Sphere, prelude::*, shader::{LambertianShader, Shader}};
+use std::{convert::TryInto, str::FromStr};
 use nalgebra::Vector3;
 use serde::{Deserialize, Deserializer, de};
 use std::collections::HashMap;
@@ -129,7 +129,7 @@ pub struct MirrorShaderData {
 #[derive(Deserialize, Debug)]
 pub struct ShaderRef {
     #[serde(rename = "_ref")]
-    ref_name: String,
+    name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -143,6 +143,7 @@ pub enum ShapeType {
 
 #[derive(Deserialize, Debug)]
 pub struct SphereData {
+    #[serde(rename = "shader")]
     shader: ShaderRef,
     #[serde(deserialize_with = "deserialize_vec3")]
     center: Vec3,
@@ -153,6 +154,7 @@ pub struct SphereData {
 
 #[derive(Deserialize, Debug)]
 pub struct BoxData {
+    #[serde(rename = "shader")]
     shader: ShaderRef,
     #[serde(rename = "minPt", deserialize_with = "deserialize_vec3")]
     min_point: Vec3,
@@ -162,12 +164,106 @@ pub struct BoxData {
     name: String,
 }
 
-pub fn load_scene(path: &str) -> Result<SceneData, Box<dyn std::error::Error>> {
+pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio: Real) -> Result<Scene, Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
-    let scene: SceneFile = serde_json::from_reader(reader)?;
+    let scene_file: SceneFile = serde_json::from_reader(reader)?;
+    let scene = scene_file.scene;
 
-    Ok(scene.scene)
+    // Check that there is exactly one camera
+    if scene.camera.len() != 1 {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "scene must have exactly one camera",
+        )));
+    }
+
+    // Check that view_dir or lookat_point is specified
+    if scene.camera[0].view_dir.is_none() && scene.camera[0].lookat_point.is_none() {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "camera must have view_dir or lookat_point specified",
+        )));
+    }
+
+    // View direction or calculate from camera position and lookat point
+    let view_dir = match scene.camera[0].view_dir {
+        Some(v) => v,
+        // calculate view dir from camera position and lookat point
+        None => scene.camera[0].position - scene.camera[0].lookat_point.unwrap(),
+    };
+
+    // Create camera
+    let camera: Box<dyn crate::camera::Camera> = match scene.camera[0].camera_type.as_str() {
+        "Perspective" => Box::new(PerspectiveCamera::new(
+            scene.camera[0].position,
+            &view_dir,
+            aspect_ratio,
+            scene.camera[0].focal_length,
+        )),
+        "Orthographic" => Box::new(OrthographicCamera::new(
+            scene.camera[0].position,
+            &view_dir,
+            aspect_ratio,
+        )),
+        _ => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "camera type not supported",
+            )))
+        }
+    };
+
+    // Create shaders
+    let mut shaders: HashMap<&'static str, Box<dyn crate::shader::Shader>> = HashMap::new();
+    for shader in scene.shader.iter() {
+        match shader {
+            ShaderType::Lambertian(lambertian) => {
+                // Convert the name to a static str - this is safe as long as the names are constant
+                let name = Box::leak(lambertian.name.clone().into_boxed_str());
+                shaders.insert(name, Box::new(LambertianShader::new(name, lambertian.diffuse, None)));
+            }
+            _ => {
+                unimplemented!("shader type not supported yet")
+            }
+        }
+    }
+
+    // Create shapes
+    let mut shapes: Vec<Box<dyn crate::geometry::Shape>> = Vec::new();
+    for shape in scene.shape.iter() {
+        match shape {
+            ShapeType::Sphere(sphere) => {
+                let shader_name = Box::leak(sphere.shader.name.clone().into_boxed_str());
+                let shader = match shaders.get(shader_name) {
+                    Some(s) => s.as_ref(),
+                    None => {
+                        return Err(Box::new(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "shape references non-existent shader",
+                        )))
+                    }
+                };
+                let shape = Sphere::new(sphere.center, sphere.radius, shader);
+                shapes.push(Box::new(shape));
+            }
+            // ShapeType::Box(box_shape) => {
+            //     let shader = get_shader(&shaders, box_shape.shader.name.as_str())?;
+            //     let shape = BoxShape::new(box_shape.min_point, box_shape.max_point, shader);
+            //     shapes.push(Box::new(shape));
+            // }
+            _ => {
+                unimplemented!("shape type not supported yet")
+            }
+        }
+    }
+
+    let scene = Scene {
+        camera,
+        shapes,
+        shaders,
+    };
+    return Ok(scene);
 }
 
 pub struct Scene<'a> {
