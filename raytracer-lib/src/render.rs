@@ -27,12 +27,12 @@ pub fn render(
             let mut color = color!(0.0, 0.0, 0.0);
             let (di, dj) = (0.5, 0.5);
             let ray = scene.camera.generate_ray(i, j, di, dj);
-            let mut hit = Hit::new();
+            let mut hit = Hit::new(&scene);
             hit.ray = ray;
 
             // TODO: scene.closestHit
             for shape in &scene.shapes {
-                if shape.closest_hit(&ray, &mut hit) {
+                if shape.closest_hit(&mut hit) {
                     // print!("hello");
                     // if let Some(s) = hit.shape {
                     // 	if let Some(sp) = (&s as &dyn Any).downcast_ref::<Sphere>() {

@@ -14,6 +14,7 @@ serde = { version = "1.0.215", features = ["derive"] }
 default = ["f64"]
 f64 = []
 f32 = []
+coordinate_system_debug = []
 
 [lib]
 crate-type = ["rlib", "cdylib"]  # To enable usage as a library in WASM

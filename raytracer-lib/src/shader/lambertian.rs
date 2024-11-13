@@ -29,9 +29,10 @@ impl Shader for LambertianShader {
     }
 
     fn apply(&self, hit: &super::Hit) -> Color {
-        // TODO: implement shadows
         let mut color = color!(0.0, 0.0, 0.0);
-        color += self.diffuse * (-hit.normal).dot(&hit.ray.direction.normalize()).max(0.0) as f32;
+        for light in &hit.scene.lights {
+            color += self.diffuse.component_mul(&light.illuminate(hit));
+        }
         color
     }
 }

@@ -20,6 +20,7 @@ mod prelude;
 mod render;
 mod scene;
 mod shader;
+mod light;
 
 use camera::Camera;
 pub use framebuffer::Framebuffer;
