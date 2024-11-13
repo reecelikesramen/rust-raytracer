@@ -16,7 +16,7 @@ struct RayTracerArgs {
     width: u32,
     #[arg(short = 'y', long = "height", default_value_t = 360)]
     height: u32,
-    #[arg(short='i', long = "scene-path")]
+    #[arg(short = 'i', long = "scene-path")]
     scene_path: String,
     #[arg(short = 'o', long = "output", default_value = "out.png")]
     output_path: String,
@@ -28,20 +28,25 @@ struct RayTracerArgs {
     aspect_ratio: f64,
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = RayTracerArgs::parse();
     println!("{:?}", args);
 
-    let scene = load_scene(&args.scene_path, args.width, args.height, args.aspect_ratio).unwrap();
-    println!("{:?}", scene);
-    return;
+    // print working directory
+    println!(
+        "Working directory: {}",
+        std::env::current_dir().unwrap().display()
+    );
+
+    let scene = load_scene(&args.scene_path, args.width, args.height, args.aspect_ratio)?;
+    println!("{:#?}", scene);
 
     let pb = indicatif::ProgressBar::new(args.width as u64 * args.height as u64);
     let per_pixel_cb = || {
         pb.inc(1);
     };
     let fb = render(
-        todo!(),
+        &scene,
         args.width,
         args.height,
         args.rays_per_pixel,
@@ -50,4 +55,6 @@ fn main() {
     );
     save(args.output_path.as_str(), &fb);
     pb.finish_with_message("Render complete");
+
+    Ok(())
 }

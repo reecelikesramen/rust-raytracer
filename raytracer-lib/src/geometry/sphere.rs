@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
 use super::{BBox, Shape, ShapeType};
-use crate::prelude::*;
 use crate::shader::{NullShader, Shader};
+use crate::{prelude::*, vec3};
 use approx::relative_eq;
-use vec3;
 
-static NULL_SHADER: NullShader = NullShader {};
-
+#[derive(Debug)]
 pub struct Sphere {
     center: Vec3,
     radius: Real,
@@ -56,7 +54,11 @@ impl Shape for Sphere {
         Arc::clone(&self.shader)
     }
 
-    fn closest_hit<'hit>(&'hit self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    fn closest_hit<'hit>(
+        &'hit self,
+        ray: &crate::math::Ray,
+        hit: &mut crate::shader::Hit<'hit>,
+    ) -> bool {
         let center_to_origin = ray.origin - self.center; // vector from center of sphere to ray origin
         let d = ray.direction;
         let discriminant = center_to_origin.dot(&d).powi(2)

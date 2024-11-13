@@ -8,5 +8,17 @@
     "**/Thumbs.db": true,
     "target": true,
     "Cargo.lock": true
-  }
+  },
+  "[rust]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "editor.tabSize": 4,
+    "rust": false
+    // replace tabs with 4 spaces
+  },
+  "lldb.showDisassembly": "auto",
+  "lldb.dereferencePointers": true,
+  "lldb.consoleMode": "commands"
 }

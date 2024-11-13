@@ -24,6 +24,6 @@ mod shader;
 use camera::Camera;
 pub use framebuffer::Framebuffer;
 pub use render::render;
-pub use scene::Scene;
 pub use scene::load_scene;
+pub use scene::Scene;
 use shader::{LambertianShader, Shader};

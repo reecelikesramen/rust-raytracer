@@ -29,7 +29,7 @@
           "kind": "bin"
         }
       },
-      "args": ["-x50", "-y50"],
+      "args": ["-x100", "-y100", "-i${workspaceFolder}/cpp/SceneData/scenes_A/oneSphere.json"],
       "cwd": "${workspaceFolder}"
     },
     {
