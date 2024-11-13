@@ -1,5 +1,5 @@
 use crate::{camera::{OrthographicCamera, PerspectiveCamera}, geometry::Sphere, prelude::*, shader::{LambertianShader, Shader}};
-use std::{convert::TryInto, str::FromStr};
+use std::{convert::TryInto, str::FromStr, sync::Arc};
 use nalgebra::Vector3;
 use serde::{Deserialize, Deserializer, de};
 use std::collections::HashMap;
@@ -215,13 +215,13 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
     };
 
     // Create shaders
-    let mut shaders: HashMap<&'static str, Box<dyn crate::shader::Shader>> = HashMap::new();
+    let mut shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>> = HashMap::new();
     for shader in scene.shader.iter() {
         match shader {
             ShaderType::Lambertian(lambertian) => {
                 // Convert the name to a static str - this is safe as long as the names are constant
                 let name = Box::leak(lambertian.name.clone().into_boxed_str());
-                shaders.insert(name, Box::new(LambertianShader::new(name, lambertian.diffuse, None)));
+                shaders.insert(name, Arc::new(LambertianShader::new(name, lambertian.diffuse, None)));
             }
             _ => {
                 unimplemented!("shader type not supported yet")
@@ -236,7 +236,7 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
             ShapeType::Sphere(sphere) => {
                 let shader_name = Box::leak(sphere.shader.name.clone().into_boxed_str());
                 let shader = match shaders.get(shader_name) {
-                    Some(s) => s.as_ref(),
+                    Some(s) => Arc::clone(s),
                     None => {
                         return Err(Box::new(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
@@ -266,10 +266,10 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
     return Ok(scene);
 }
 
-pub struct Scene<'a> {
+pub struct Scene {
     pub camera: Box<dyn crate::camera::Camera>,
-    pub shapes: Vec<Box<dyn crate::geometry::Shape<'a>>>,
-    pub shaders: HashMap<&'static str, Box<dyn crate::shader::Shader>>,
+    pub shapes: Vec<Box<dyn crate::geometry::Shape>>,
+    pub shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>>,
 }
 
 // impl<'a> Scene<'a> {}
