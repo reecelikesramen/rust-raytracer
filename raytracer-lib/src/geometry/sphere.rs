@@ -53,7 +53,7 @@ impl Shape for Sphere {
     }
 
     fn get_shader(&self) -> Arc<dyn Shader> {
-        self.shader
+        Arc::clone(&self.shader)
     }
 
     fn closest_hit<'hit>(&'hit self, ray: &crate::math::Ray, hit: &mut crate::shader::Hit<'hit>) -> bool {
