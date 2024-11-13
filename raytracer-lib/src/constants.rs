@@ -1,5 +1,4 @@
-use crate::prelude::*;
-use color;
+use crate::{color, prelude::*};
 
 pub(crate) static DEFAULT_IMAGE_PLANE_WIDTH: Real = 0.5;
 pub(crate) static DEFAULT_ASPECT_RATIO: Real = 0.5;

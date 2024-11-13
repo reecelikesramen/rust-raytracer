@@ -1,6 +1,6 @@
-use crate::{math::Ray, prelude::*};
-use vec3;
+use crate::{math::Ray, prelude::*, vec3};
 
+#[derive(Debug)]
 pub struct BBox {
     min: Vec3,
     max: Vec3,

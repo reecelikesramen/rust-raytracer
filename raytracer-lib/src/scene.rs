@@ -1,19 +1,23 @@
-use crate::{camera::{OrthographicCamera, PerspectiveCamera}, geometry::Sphere, prelude::*, shader::{LambertianShader, Shader}};
-use std::{convert::TryInto, str::FromStr, sync::Arc};
+use crate::{
+    camera::{OrthographicCamera, PerspectiveCamera},
+    color,
+    geometry::Sphere,
+    prelude::*,
+    shader::{LambertianShader, Shader},
+};
 use nalgebra::Vector3;
-use serde::{Deserialize, Deserializer, de};
+use serde::{de, Deserialize, Deserializer};
 use std::collections::HashMap;
-use {vec3, color};
+use std::{convert::TryInto, str::FromStr, sync::Arc};
 
-fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String> 
+fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String>
 where
-    FloatType: Into<f64> + Copy + FromStr, <FloatType as FromStr>::Err: std::fmt::Display
+    FloatType: Into<f64> + Copy + FromStr,
+    <FloatType as FromStr>::Err: std::fmt::Display,
 {
-    let numbers: Result<Vec<FloatType>, _> = s
-        .split_whitespace()
-        .map(FloatType::from_str)
-        .collect();
-    
+    let numbers: Result<Vec<FloatType>, _> =
+        s.split_whitespace().map(FloatType::from_str).collect();
+
     match numbers {
         Ok(nums) if nums.len() == 3 => Ok(Vector3::new(nums[0], nums[1], nums[2])),
         Ok(_) => Err("expected exactly 3 space-separated numbers".to_string()),
@@ -24,21 +28,24 @@ where
 fn deserialize_vec3<'de, D, FloatType>(deserializer: D) -> Result<Vector3<FloatType>, D::Error>
 where
     D: Deserializer<'de>,
-    FloatType: Into<f64> + Copy + FromStr, <FloatType as FromStr>::Err: std::fmt::Display
+    FloatType: Into<f64> + Copy + FromStr,
+    <FloatType as FromStr>::Err: std::fmt::Display,
 {
     let s: String = String::deserialize(deserializer)?;
     parse_vec3(&s).map_err(de::Error::custom)
 }
 
-
-fn deserialize_optional_vec3<'de, D, FloatType>(deserializer: D) -> Result<Option<Vector3<FloatType>>, D::Error>
+fn deserialize_optional_vec3<'de, D, FloatType>(
+    deserializer: D,
+) -> Result<Option<Vector3<FloatType>>, D::Error>
 where
     D: Deserializer<'de>,
-    FloatType: Into<f64> + Copy + FromStr, <FloatType as FromStr>::Err: std::fmt::Display
+    FloatType: Into<f64> + Copy + FromStr,
+    <FloatType as FromStr>::Err: std::fmt::Display,
 {
     // First deserialize to Option<String>
     let opt: Option<String> = Option::deserialize(deserializer)?;
-    
+
     match opt {
         Some(s) => parse_vec3(&s).map(Some).map_err(de::Error::custom),
         None => Ok(None),
@@ -56,17 +63,29 @@ pub struct SceneData {
     light: Vec<LightData>,
     shader: Vec<ShaderType>,
     shape: Vec<ShapeType>,
-    #[serde(rename = "_bgColor", default)]
-    background_color: Option<String>,
+    #[serde(
+        rename = "_bgColor",
+        default,
+        deserialize_with = "deserialize_optional_vec3"
+    )]
+    background_color: Option<Color>,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct CameraData {
     #[serde(deserialize_with = "deserialize_vec3")]
     position: Vec3,
-    #[serde(rename = "viewDir", default, deserialize_with = "deserialize_optional_vec3")]
+    #[serde(
+        rename = "viewDir",
+        default,
+        deserialize_with = "deserialize_optional_vec3"
+    )]
     view_dir: Option<Vec3>,
-    #[serde(rename = "lookatPoint", default, deserialize_with = "deserialize_optional_vec3")]
+    #[serde(
+        rename = "lookatPoint",
+        default,
+        deserialize_with = "deserialize_optional_vec3"
+    )]
     lookat_point: Option<Vec3>,
     #[serde(rename = "focalLength")]
     focal_length: Real,
@@ -164,11 +183,19 @@ pub struct BoxData {
     name: String,
 }
 
-pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio: Real) -> Result<Scene, Box<dyn std::error::Error>> {
+pub fn load_scene(
+    path: &str,
+    image_width: u32,
+    image_height: u32,
+    aspect_ratio: Real,
+) -> Result<Scene, Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
     let scene_file: SceneFile = serde_json::from_reader(reader)?;
     let scene = scene_file.scene;
+
+    // print scene
+    println!("{:#?}", scene);
 
     // Check that there is exactly one camera
     if scene.camera.len() != 1 {
@@ -194,14 +221,14 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
     };
 
     // Create camera
-    let camera: Box<dyn crate::camera::Camera> = match scene.camera[0].camera_type.as_str() {
-        "Perspective" => Box::new(PerspectiveCamera::new(
+    let mut camera: Box<dyn crate::camera::Camera> = match scene.camera[0].camera_type.as_str() {
+        "perspective" => Box::new(PerspectiveCamera::new(
             scene.camera[0].position,
             &view_dir,
             aspect_ratio,
             scene.camera[0].focal_length,
         )),
-        "Orthographic" => Box::new(OrthographicCamera::new(
+        "orthographic" => Box::new(OrthographicCamera::new(
             scene.camera[0].position,
             &view_dir,
             aspect_ratio,
@@ -213,6 +240,7 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
             )))
         }
     };
+    camera.set_image_pixels(image_width, image_height);
 
     // Create shaders
     let mut shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>> = HashMap::new();
@@ -221,7 +249,10 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
             ShaderType::Lambertian(lambertian) => {
                 // Convert the name to a static str - this is safe as long as the names are constant
                 let name = Box::leak(lambertian.name.clone().into_boxed_str());
-                shaders.insert(name, Arc::new(LambertianShader::new(name, lambertian.diffuse, None)));
+                shaders.insert(
+                    name,
+                    Arc::new(LambertianShader::new(name, lambertian.diffuse, None)),
+                );
             }
             _ => {
                 unimplemented!("shader type not supported yet")
@@ -244,7 +275,8 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
                         )))
                     }
                 };
-                let shape = Sphere::new(sphere.center, sphere.radius, shader);
+                let shape_name = Box::leak(sphere.name.clone().into_boxed_str());
+                let shape = Sphere::new(sphere.center, sphere.radius, shader, shape_name);
                 shapes.push(Box::new(shape));
             }
             // ShapeType::Box(box_shape) => {
@@ -259,6 +291,7 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
     }
 
     let scene = Scene {
+        background_color: scene.background_color.unwrap_or(color!(0.0, 0.0, 0.0)),
         camera,
         shapes,
         shaders,
@@ -266,7 +299,9 @@ pub fn load_scene(path: &str, image_width: u32, image_height: u32, aspect_ratio:
     return Ok(scene);
 }
 
+#[derive(Debug)]
 pub struct Scene {
+    pub background_color: Color,
     pub camera: Box<dyn crate::camera::Camera>,
     pub shapes: Vec<Box<dyn crate::geometry::Shape>>,
     pub shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>>,

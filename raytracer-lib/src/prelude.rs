@@ -16,13 +16,13 @@ pub type Vec3 = nalgebra::Vector3<Real>;
 #[macro_export]
 macro_rules! vec3 {
     ($x:expr, $y:expr, $z:expr) => {
-			Vec3::new($x, $y, $z)
+        Vec3::new($x, $y, $z)
     };
 }
 
 #[macro_export]
 macro_rules! color {
-		($x:expr, $y:expr, $z:expr) => {
-			Color::new($x, $y, $z)
-		};
+    ($x:expr, $y:expr, $z:expr) => {
+        Color::new($x, $y, $z)
+    };
 }
