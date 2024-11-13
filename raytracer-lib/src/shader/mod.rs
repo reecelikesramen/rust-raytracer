@@ -8,7 +8,7 @@ pub use self::null::NullShader;
 pub use self::lambertian::LambertianShader;
 pub use self::hit_struct::Hit;
 
-pub trait Shader {
+pub trait Shader: Send + Sync {
 	fn get_name(&self) -> &str;
 	fn ambient(&self) -> Color;
 	fn apply(&self, hit: &Hit) -> Color;
