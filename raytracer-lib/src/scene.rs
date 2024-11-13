@@ -272,4 +272,4 @@ pub struct Scene<'a> {
     pub shaders: HashMap<&'static str, Box<dyn crate::shader::Shader>>,
 }
 
-impl<'a> Scene<'a> {}
+// impl<'a> Scene<'a> {}
