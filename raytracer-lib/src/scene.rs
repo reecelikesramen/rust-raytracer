@@ -2,6 +2,7 @@ use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
     geometry::Sphere,
+    light::PointLight,
     prelude::*,
     shader::{LambertianShader, Shader},
 };
@@ -188,6 +189,7 @@ pub fn load_scene(
     image_width: u32,
     image_height: u32,
     aspect_ratio: Real,
+    disable_shadows: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
@@ -290,21 +292,39 @@ pub fn load_scene(
         }
     }
 
+    // Create lights
+    let mut lights: Vec<Box<dyn crate::light::Light>> = Vec::new();
+    for light in scene.light.iter() {
+        match light.light_type.as_str() {
+            "point" => {
+                let light = PointLight::new(light.position, light.intensity);
+                lights.push(Box::new(light));
+            }
+            _ => {
+                unimplemented!("light type not supported yet")
+            }
+        }
+    }
+
     let scene = Scene {
+        disable_shadows,
         background_color: scene.background_color.unwrap_or(color!(0.0, 0.0, 0.0)),
         camera,
         shapes,
         shaders,
+        lights,
     };
     return Ok(scene);
 }
 
 #[derive(Debug)]
 pub struct Scene {
+    pub disable_shadows: bool,
     pub background_color: Color,
     pub camera: Box<dyn crate::camera::Camera>,
     pub shapes: Vec<Box<dyn crate::geometry::Shape>>,
     pub shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>>,
+    pub lights: Vec<Box<dyn crate::light::Light>>,
 }
 
 // impl<'a> Scene<'a> {}

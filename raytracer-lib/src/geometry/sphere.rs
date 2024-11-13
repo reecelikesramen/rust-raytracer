@@ -54,13 +54,9 @@ impl Shape for Sphere {
         Arc::clone(&self.shader)
     }
 
-    fn closest_hit<'hit>(
-        &'hit self,
-        ray: &crate::math::Ray,
-        hit: &mut crate::shader::Hit<'hit>,
-    ) -> bool {
-        let center_to_origin = ray.origin - self.center; // vector from center of sphere to ray origin
-        let d = ray.direction;
+    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+        let center_to_origin = hit.ray.origin - self.center; // vector from center of sphere to ray origin
+        let d = hit.ray.direction;
         let discriminant = center_to_origin.dot(&d).powi(2)
             - d.dot(&d) * (center_to_origin.dot(&center_to_origin) - self.radius.powi(2));
 
@@ -78,21 +74,21 @@ impl Shape for Sphere {
 
         if valid_t_range.contains(&t1) && valid_t_range.contains(&t2) {
             hit.t = t1.min(t2);
-            hit.normal = self.normal(&ray.point_at(hit.t));
+            hit.normal = self.normal(&hit.hit_point());
             hit.shape = Some(self);
             return true;
         }
 
         if valid_t_range.contains(&t1) {
             hit.t = t1;
-            hit.normal = self.normal(&ray.point_at(hit.t));
+            hit.normal = self.normal(&hit.hit_point());
             hit.shape = Some(self);
             return true;
         }
 
         if valid_t_range.contains(&t2) {
             hit.t = t2;
-            hit.normal = self.normal(&ray.point_at(hit.t));
+            hit.normal = self.normal(&hit.hit_point());
             hit.shape = Some(self);
             return true;
         }

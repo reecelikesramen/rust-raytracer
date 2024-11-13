@@ -35,7 +35,7 @@ impl CoordinateSystem {
         let u = temp_up.cross(&w);
         let v = w.cross(&u);
 
-        #[cfg(debug_assertions)]
+        #[cfg(feature = "coordinate_system_debug")]
         {
             let _u: Vec3 = u.normalize();
             let _v: Vec3 = v.normalize();

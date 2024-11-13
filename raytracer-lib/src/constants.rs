@@ -1,5 +1,6 @@
 use crate::{color, prelude::*};
 
+pub(crate) static VERY_SMALL_NUMBER: Real = 1e-6;
 pub(crate) static DEFAULT_IMAGE_PLANE_WIDTH: Real = 0.5;
 pub(crate) static DEFAULT_ASPECT_RATIO: Real = 0.5;
 pub(crate) static DEFAULT_BACKGROUND_COLOR: Color = color!(0.198, 0.198, 0.198);
