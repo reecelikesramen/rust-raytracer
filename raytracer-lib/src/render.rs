@@ -19,7 +19,6 @@ pub fn render(
 ) -> Framebuffer {
     let cb = per_pixel_cb.unwrap_or(&NOP_CB);
     let mut fb = Framebuffer::new(width, height);
-    let mut hits = 0;
     for i in 0..width {
         for j in 0..height {
             // TODO: implement rpp and anti-aliasing
@@ -27,8 +26,7 @@ pub fn render(
             let mut color = color!(0.0, 0.0, 0.0);
             let (di, dj) = (0.5, 0.5);
             let ray = scene.camera.generate_ray(i, j, di, dj);
-            let mut hit = Hit::new(&scene);
-            hit.ray = ray;
+            let mut hit = Hit::new(ray, &scene);
 
             // TODO: scene.closestHit
             for shape in &scene.shapes {
@@ -40,8 +38,7 @@ pub fn render(
                     // 	}
                     // }
                     any_hit = true;
-                    hits += 1;
-                    color += hit.shape.unwrap().get_shader().apply(&hit)
+                    color = hit.shape.unwrap().get_shader().apply(&hit)
                 }
             }
 

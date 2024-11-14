@@ -70,7 +70,7 @@ impl Shape for Sphere {
 
         let t1 = (numerator - discriminant.sqrt()) / denominator;
         let t2 = (numerator + discriminant.sqrt()) / denominator;
-        let valid_t_range = hit.t_min..hit.t_max;
+        let valid_t_range = hit.t_min..hit.t;
 
         if valid_t_range.contains(&t1) && valid_t_range.contains(&t2) {
             hit.t = t1.min(t2);

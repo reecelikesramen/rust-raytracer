@@ -1,9 +1,13 @@
-use crate::{constants::VERY_SMALL_NUMBER, math::Ray, prelude::*, scene::{self, Scene}};
+use crate::{
+    constants::VERY_SMALL_NUMBER,
+    math::Ray,
+    prelude::*,
+    scene::{self, Scene},
+};
 
 pub struct Hit<'hit> {
     pub t: Real,
     pub t_min: Real,
-    pub t_max: Real,
     pub depth: u16,
     pub ray: crate::math::Ray,
     pub normal: Vec3,
@@ -12,13 +16,12 @@ pub struct Hit<'hit> {
 }
 
 impl<'hit> Hit<'hit> {
-    pub fn new(scene: &'hit Scene) -> Self {
+    pub fn new(ray: Ray, scene: &'hit Scene) -> Self {
         Self {
             t: INFINITY,
             t_min: 1.0,
-            t_max: INFINITY,
             depth: 0,
-            ray: Ray::default(),
+            ray,
             normal: Vec3::default(),
             shape: None,
             scene,
@@ -29,7 +32,6 @@ impl<'hit> Hit<'hit> {
         Self {
             t: 1.0,
             t_min: VERY_SMALL_NUMBER,
-            t_max: 1.0,
             depth: 0,
             ray: to_light,
             normal: Vec3::default(),

@@ -29,7 +29,7 @@
           "kind": "bin"
         }
       },
-      "args": ["-x200", "-y200", "-i${workspaceFolder}/cpp/SceneData/new/obscure.json"],
+      "args": ["-x200", "-y200", "-i${workspaceFolder}/cpp/SceneData/scenes_A/simpleSphereScene.json"],
       "cwd": "${workspaceFolder}"
     },
     {

@@ -1,9 +1,11 @@
 use crate::prelude::*;
 
 mod bbox;
+mod cuboid;
 mod sphere;
 
 pub use self::bbox::BBox;
+pub use self::cuboid::Cuboid;
 pub use self::sphere::Sphere;
 
 pub enum ShapeType {
