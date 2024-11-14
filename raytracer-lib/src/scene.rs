@@ -247,7 +247,7 @@ pub fn load_scene(
     let view_dir = match scene.camera[0].view_dir {
         Some(v) => v,
         // calculate view dir from camera position and lookat point
-        None => scene.camera[0].position - scene.camera[0].lookat_point.unwrap(),
+        None => scene.camera[0].lookat_point.unwrap() - scene.camera[0].position,
     };
 
     // Create camera
