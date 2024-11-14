@@ -2,6 +2,7 @@ cpp
 target
 .aider*
 *.png
+!renders/*.png
 .DS_Store
 .env
 testing.ipynb
