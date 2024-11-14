@@ -1,4 +1,4 @@
-use crate::{color, shader::Hit, Color, Vec3};
+use crate::{color, math::Ray, shader::Hit, Color, Vec3};
 
 use super::Light;
 
@@ -26,16 +26,15 @@ impl Light for PointLight {
         self.position
     }
 
-    fn illuminate(&self, hit: &Hit) -> Color {
-        let surface_to_light: Vec3 = (self.get_position() - hit.hit_point());
+    fn illuminates(&self, hit: &Hit) -> Option<Vec3> {
+        let surface_to_light = Ray::atob(hit.hit_point(), self.get_position());
+        let mut shadow_hit = Hit::to_light(surface_to_light, &hit.scene);
 
-        if !hit.scene.disable_shadows {
-            // && hit.scene.any_hit()
-            return color!(0.0, 0.0, 0.0);
+        // if shadows are enabled and a shape blocks the light
+        if !hit.scene.disable_shadows && hit.scene.any_hit(&mut shadow_hit) {
+            return None;
         }
 
-        let cos_incidence = hit.normal.dot(&surface_to_light.normalize());
-
-        cos_incidence.max(0.0) as f32 * self.get_intensity()
+        Some(surface_to_light.direction)
     }
 }

@@ -1,37 +1,36 @@
-use crate::{color, constants::DEFAULT_AMBIENT_LIGHT, prelude::*};
+use crate::{color, constants::DEFAULT_AMBIENT_LIGHT, light::Light, prelude::*};
 
 use super::Shader;
 
 #[derive(Debug)]
 pub struct LambertianShader {
-    name: &'static str,
     diffuse: Color,
-    ambient: Color,
 }
 
 impl LambertianShader {
-    pub fn new(name: &'static str, diffuse: Color, ambient: Option<Color>) -> Self {
-        Self {
-            name,
-            diffuse,
-            ambient: ambient.unwrap_or(DEFAULT_AMBIENT_LIGHT),
-        }
+    pub fn new(diffuse: Color) -> Self {
+        Self { diffuse }
     }
 }
 
 impl Shader for LambertianShader {
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
-    fn ambient(&self) -> Color {
-        self.ambient
-    }
-
     fn apply(&self, hit: &super::Hit) -> Color {
         let mut color = color!(0.0, 0.0, 0.0);
-        for light in &hit.scene.lights {
-            color += self.diffuse.component_mul(&light.illuminate(hit));
+        for (light, surface_to_light) in hit
+            .scene
+            .lights
+            .iter()
+            .filter_map(|light| {
+                light
+                    .illuminates(hit)
+                    .map(|surface_to_light| (light.as_ref(), surface_to_light))
+            })
+            .collect::<Vec<(&dyn Light, Vec3)>>()
+        {
+            let cos_incidence = hit.normal.dot(&surface_to_light.normalize());
+
+            color +=
+                self.diffuse.component_mul(&light.get_intensity()) * cos_incidence.max(0.0) as f32;
         }
         color
     }
