@@ -1,8 +1,8 @@
 use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
-    geometry::Sphere,
-    light::{AmbientLight, PointLight},
+    geometry::{Cuboid, Sphere},
+    light::{AmbientLight, Light, PointLight},
     prelude::*,
     shader::{BlinnPhongShader, Hit, LambertianShader, Shader},
 };
@@ -59,11 +59,10 @@ struct SceneFile {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct SceneData {
+struct SceneData {
     camera: Vec<CameraData>,
-    light: Vec<LightData>,
+    light: Vec<LightType>,
     shader: Vec<ShaderType>,
-    // shape: Vec<ShapeType>,
     shape: Vec<ShapeData>,
     #[serde(
         rename = "_bgColor",
@@ -74,7 +73,7 @@ pub struct SceneData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct CameraData {
+struct CameraData {
     #[serde(deserialize_with = "deserialize_vec3")]
     position: Vec3,
     #[serde(
@@ -100,18 +99,31 @@ pub struct CameraData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LightData {
+#[serde(tag = "_type")]
+enum LightType {
+    #[serde(rename = "point")]
+    PointLight(PointLightData),
+    #[serde(rename = "ambient")]
+    AmbientLight(AmbientLightData),
+}
+
+#[derive(Deserialize, Debug)]
+struct PointLightData {
     #[serde(deserialize_with = "deserialize_vec3")]
     position: Vec3,
     #[serde(deserialize_with = "deserialize_vec3")]
     intensity: Color,
-    #[serde(rename = "_type")]
-    light_type: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct AmbientLightData {
+    #[serde(deserialize_with = "deserialize_vec3")]
+    intensity: Color,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
-pub enum ShaderType {
+enum ShaderType {
     #[serde(rename = "Lambertian")]
     Lambertian(LambertianShaderData),
     #[serde(rename = "BlinnPhong")]
@@ -121,7 +133,7 @@ pub enum ShaderType {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct LambertianShaderData {
+struct LambertianShaderData {
     #[serde(deserialize_with = "deserialize_vec3")]
     diffuse: Color,
     #[serde(rename = "_name")]
@@ -129,7 +141,7 @@ pub struct LambertianShaderData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct BlinnPhongShaderData {
+struct BlinnPhongShaderData {
     #[serde(deserialize_with = "deserialize_vec3")]
     diffuse: Color,
     #[serde(deserialize_with = "deserialize_vec3")]
@@ -141,20 +153,20 @@ pub struct BlinnPhongShaderData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct MirrorShaderData {
+struct MirrorShaderData {
     roughness: Real,
     #[serde(rename = "_name")]
     name: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ShaderRef {
+struct ShaderRef {
     #[serde(rename = "_ref")]
     name: String,
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ShapeData {
+struct ShapeData {
     #[serde(rename = "_name")]
     name: String,
     #[serde(rename = "shader")]
@@ -165,7 +177,7 @@ pub struct ShapeData {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
-pub enum ShapeType {
+enum ShapeType {
     #[serde(rename = "sphere")]
     Sphere(SphereData),
     #[serde(rename = "box")]
@@ -173,7 +185,7 @@ pub enum ShapeType {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct SphereData {
+struct SphereData {
     // #[serde(rename = "shader")]
     // shader: ShaderRef,
     #[serde(deserialize_with = "deserialize_vec3")]
@@ -184,7 +196,7 @@ pub struct SphereData {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct BoxData {
+struct BoxData {
     // #[serde(rename = "shader")]
     // shader: ShaderRef,
     #[serde(rename = "minPt", deserialize_with = "deserialize_vec3")]
@@ -310,11 +322,11 @@ pub fn load_scene(
                 let shape = Sphere::new(sphere.center, sphere.radius, shader, shape_name);
                 shapes.push(Box::new(shape));
             }
-            // ShapeType::Box(box_shape) => {
-            //     let shader = get_shader(&shaders, box_shape.shader.name.as_str())?;
-            //     let shape = BoxShape::new(box_shape.min_point, box_shape.max_point, shader);
-            //     shapes.push(Box::new(shape));
-            // }
+            ShapeType::Box(box_shape) => {
+                let shape =
+                    Cuboid::new(box_shape.min_point, box_shape.max_point, shader, shape_name);
+                shapes.push(Box::new(shape));
+            }
             _ => {
                 unimplemented!("shape type not supported yet")
             }
@@ -324,19 +336,19 @@ pub fn load_scene(
     // Create lights
     let mut lights: Vec<Box<dyn crate::light::Light>> = Vec::new();
     for light in scene.light.iter() {
-        match light.light_type.as_str() {
-            "point" => {
-                let light = PointLight::new(light.position, light.intensity);
-                lights.push(Box::new(light));
+        let light: Box<dyn Light> = match light {
+            LightType::AmbientLight(ambient_light) => {
+                Box::new(AmbientLight::new(ambient_light.intensity))
+                
             }
-            "ambient" => {
-                let light = AmbientLight::new(light.intensity);
-                lights.push(Box::new(light));
+            LightType::PointLight(point_light) => {
+                Box::new(PointLight::new(point_light.position, point_light.intensity))
             }
             _ => {
                 unimplemented!("light type not supported yet")
             }
-        }
+        };
+        lights.push(light);
     }
 
     let scene = Scene {
