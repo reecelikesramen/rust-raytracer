@@ -62,99 +62,56 @@ impl Shape for Triangle {
     }
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
-        todo!()
-        /* original C++ implementation:
-        // e = r.origin, d = r.direction
-        // triangle with vertices a, b, c
-        // e + td = a + B(b-a) + Y(b-c) for some intersectT > 0, B > 0, Y > 0, and B+Y
-        // < 1
-        // Following code is based directly off cramer's rule in the book
-        // This is made to get a quick and dirty attempt at ray tracing a triangle
-        // Code can be heavily optimized
+        use nalgebra::Matrix3;
+        
+        // Create the matrices for Cramer's rule
+        let ab = self.a - self.b;
+        let ac = self.a - self.c;
+        let ao = self.a - hit.ray.origin;
+        let d = hit.ray.direction;
 
-        std::vector<double> matrixA(9), matrixBeta(9), matrixGamma(9), matrixT(9);
+        // Matrix A is common denominator for all calculations
+        let matrix_a = Matrix3::from_columns(&[ab, ac, d]);
+        let det_a = matrix_a.determinant();
 
-        matrixA = { // 1st row
-                    m_a[0] - m_b[0], m_a[0] - m_c[0], r.direction()[0],
-                    // 2nd row
-                    m_a[1] - m_b[1], m_a[1] - m_c[1], r.direction()[1],
-                    // 3rd row
-                    m_a[2] - m_b[2], m_a[2] - m_c[2], r.direction()[2]
-        };
+        // Early exit if determinant is too close to zero (parallel to triangle)
+        if det_a.abs() < Real::EPSILON {
+            return false;
+        }
 
-        double detA =
-          matrixA[0] * (matrixA[4] * matrixA[8] - matrixA[5] * matrixA[7]) +
-          matrixA[3] * (matrixA[2] * matrixA[7] - matrixA[1] * matrixA[8]) +
-          matrixA[6] * (matrixA[1] * matrixA[5] - matrixA[4] * matrixA[2]);
+        // Matrix for t calculation
+        let matrix_t = Matrix3::from_columns(&[ab, ac, ao]);
+        let det_t = matrix_t.determinant();
+        let intersect_t = det_t / det_a;
 
-        matrixT = {
-          // 1st row
-          m_a[0] - m_b[0], m_a[0] - m_c[0], m_a[0] - r.origin()[0],
-          // 2nd row
-          m_a[1] - m_b[1], m_a[1] - m_c[1], m_a[1] - r.origin()[1],
-          // 3rd row
-          m_a[2] - m_b[2], m_a[2] - m_c[2], m_a[2] - r.origin()[2],
-        };
+        // Check if intersection is within valid range
+        if intersect_t < hit.t_min || intersect_t > hit.t {
+            return false;
+        }
 
-        double detT =
-          matrixT[0] * (matrixT[4] * matrixT[8] - matrixT[5] * matrixT[7]) +
-          matrixT[3] * (matrixT[2] * matrixT[7] - matrixT[1] * matrixT[8]) +
-          matrixT[6] * (matrixT[1] * matrixT[5] - matrixT[4] * matrixT[2]);
+        // Matrix for gamma calculation (first barycentric coordinate)
+        let matrix_gamma = Matrix3::from_columns(&[ab, ao, d]);
+        let det_gamma = matrix_gamma.determinant();
+        let gamma = det_gamma / det_a;
 
-        double intersectT = detT / detA;
+        if gamma < 0.0 || gamma > 1.0 {
+            return false;
+        }
 
-        if (intersectT < hit.tmin || intersectT > hit.tmax)
-          return false;
+        // Matrix for beta calculation (second barycentric coordinate)
+        let matrix_beta = Matrix3::from_columns(&[ao, ac, d]);
+        let det_beta = matrix_beta.determinant();
+        let beta = det_beta / det_a;
 
-        matrixGamma = { // 1st row
-                        m_a[0] - m_b[0], m_a[0] - r.origin()[0], r.direction()[0],
-                        // 2nd row
-                        m_a[1] - m_b[1], m_a[1] - r.origin()[1], r.direction()[1],
-                        // 3rd row
-                        m_a[2] - m_b[2], m_a[2] - r.origin()[2], r.direction()[2]
-        };
+        if beta < 0.0 || beta > 1.0 - gamma {
+            return false;
+        }
 
-        double detGamma =
-          matrixGamma[0] *
-            (matrixGamma[4] * matrixGamma[8] - matrixGamma[5] * matrixGamma[7]) +
-          matrixGamma[3] *
-            (matrixGamma[2] * matrixGamma[7] - matrixGamma[1] * matrixGamma[8]) +
-          matrixGamma[6] *
-            (matrixGamma[1] * matrixGamma[5] - matrixGamma[4] * matrixGamma[2]);
+        // We have a valid hit, update the hit record
+        hit.t = intersect_t;
+        hit.normal = self.normal;
+        hit.shape = Some(self);
 
-        double gamma = detGamma / detA;
-
-        if (gamma < 0 || gamma > 1)
-          return false;
-
-        matrixBeta = { // 1st row
-                       m_a[0] - r.origin()[0], m_a[0] - m_c[0], r.direction()[0],
-                       // 2nd row
-                       m_a[1] - r.origin()[1], m_a[1] - m_c[1], r.direction()[1],
-                       // 3rd row
-                       m_a[2] - r.origin()[2], m_a[2] - m_c[2], r.direction()[2]
-        };
-
-        double detBeta =
-          matrixBeta[0] *
-            (matrixBeta[4] * matrixBeta[8] - matrixBeta[5] * matrixBeta[7]) +
-          matrixBeta[3] *
-            (matrixBeta[2] * matrixBeta[7] - matrixBeta[1] * matrixBeta[8]) +
-          matrixBeta[6] *
-            (matrixBeta[1] * matrixBeta[5] - matrixBeta[4] * matrixBeta[2]);
-
-        double beta = detBeta / detA;
-
-        if (beta < 0 || beta > 1 - gamma)
-          return false;
-
-        hit.ray = r;
-        hit.shaderPtr = shaderPtr;
-        hit.shape = this;
-        hit.t = intersectT;
-        hit.normal = normal();
-
-        return true;
-               */
+        true
     }
 }
