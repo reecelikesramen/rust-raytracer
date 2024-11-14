@@ -1,7 +1,7 @@
 use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
-    geometry::{Cuboid, Sphere},
+    geometry::{Cuboid, Shape, Sphere, Triangle},
     light::{AmbientLight, Light, PointLight},
     prelude::*,
     shader::{BlinnPhongShader, Hit, LambertianShader, Shader},
@@ -182,29 +182,33 @@ enum ShapeType {
     Sphere(SphereData),
     #[serde(rename = "box")]
     Box(BoxData),
+    #[serde(rename = "triangle")]
+    Triangle(TriangleData),
 }
 
 #[derive(Deserialize, Debug)]
 struct SphereData {
-    // #[serde(rename = "shader")]
-    // shader: ShaderRef,
     #[serde(deserialize_with = "deserialize_vec3")]
     center: Vec3,
     radius: Real,
-    // #[serde(rename = "_name")]
-    // name: String,
 }
 
 #[derive(Deserialize, Debug)]
 struct BoxData {
-    // #[serde(rename = "shader")]
-    // shader: ShaderRef,
     #[serde(rename = "minPt", deserialize_with = "deserialize_vec3")]
     min_point: Vec3,
     #[serde(rename = "maxPt", deserialize_with = "deserialize_vec3")]
     max_point: Vec3,
-    // #[serde(rename = "_name")]
-    // name: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct TriangleData {
+    #[serde(rename = "v0", deserialize_with = "deserialize_vec3")]
+    a: Vec3,
+    #[serde(rename = "v1", deserialize_with = "deserialize_vec3")]
+    b: Vec3,
+    #[serde(rename = "v2", deserialize_with = "deserialize_vec3")]
+    c: Vec3,
 }
 
 pub fn load_scene(
@@ -317,20 +321,27 @@ pub fn load_scene(
                 "shape names must be unique",
             )));
         }
-        match &shape.shape {
-            ShapeType::Sphere(sphere) => {
-                let shape = Sphere::new(sphere.center, sphere.radius, shader, shape_name);
-                shapes.push(Box::new(shape));
-            }
-            ShapeType::Box(box_shape) => {
-                let shape =
-                    Cuboid::new(box_shape.min_point, box_shape.max_point, shader, shape_name);
-                shapes.push(Box::new(shape));
-            }
+        let shape: Box<dyn Shape> = match &shape.shape {
+            ShapeType::Sphere(sphere) => Box::new(Sphere::new(
+                sphere.center,
+                sphere.radius,
+                shader,
+                shape_name,
+            )),
+            ShapeType::Box(cuboid) => Box::new(Cuboid::new(
+                cuboid.min_point,
+                cuboid.max_point,
+                shader,
+                shape_name,
+            )),
+            ShapeType::Triangle(triangle) => Box::new(Triangle::new(
+                triangle.a, triangle.b, triangle.c, shader, shape_name,
+            )),
             _ => {
                 unimplemented!("shape type not supported yet")
             }
-        }
+        };
+        shapes.push(shape);
     }
 
     // Create lights
@@ -339,7 +350,6 @@ pub fn load_scene(
         let light: Box<dyn Light> = match light {
             LightType::AmbientLight(ambient_light) => {
                 Box::new(AmbientLight::new(ambient_light.intensity))
-                
             }
             LightType::PointLight(point_light) => {
                 Box::new(PointLight::new(point_light.position, point_light.intensity))

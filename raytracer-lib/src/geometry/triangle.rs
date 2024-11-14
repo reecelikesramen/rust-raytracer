@@ -16,7 +16,7 @@ pub struct Triangle {
 }
 
 impl Triangle {
-    fn new(a: Vec3, b: Vec3, c: Vec3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(a: Vec3, b: Vec3, c: Vec3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         let normal = (b - a).cross(&(c - a)).normalize();
         let min = vec3!(
             a.x.min(b.x).min(c.x),
@@ -63,7 +63,7 @@ impl Shape for Triangle {
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
         use nalgebra::Matrix3;
-        
+
         // Create the matrices for Cramer's rule
         let ab = self.a - self.b;
         let ac = self.a - self.c;
