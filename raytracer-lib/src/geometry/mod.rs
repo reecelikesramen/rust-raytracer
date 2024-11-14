@@ -3,6 +3,7 @@ use crate::prelude::*;
 mod bbox;
 mod cuboid;
 mod sphere;
+mod triangle;
 
 pub use self::bbox::BBox;
 pub use self::cuboid::Cuboid;
