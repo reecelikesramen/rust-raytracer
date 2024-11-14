@@ -1,5 +1,174 @@
-use crate::prelude::*;
+use crate::{geometry::Shape, math::Ray, prelude::*};
+use std::sync::Arc;
 
-pub struct BVH {}
+// Axis enum for splitting
+#[derive(Debug, Clone, Copy)]
+enum Axis {
+    X,
+    Y,
+    Z,
+}
 
-pub struct BVHNode {}
+impl Axis {
+    fn next(&self) -> Self {
+        match self {
+            Axis::X => Axis::Y,
+            Axis::Y => Axis::Z,
+            Axis::Z => Axis::X,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct BVHNode {
+    bbox: BBox,
+    left: Option<Box<BVHNode>>,
+    right: Option<Box<BVHNode>>,
+    shapes: Vec<Arc<dyn Shape>>,
+}
+
+impl BVHNode {
+    // Maximum shapes in a leaf node
+    const MAX_SHAPES: usize = 4;
+
+    pub fn new(mut shapes: Vec<Arc<dyn Shape>>, axis: Axis) -> Self {
+        // If we have few enough shapes, make a leaf node
+        if shapes.len() <= Self::MAX_SHAPES {
+            // Calculate bounding box for all shapes
+            let bbox = shapes.iter().fold(None, |acc, shape| {
+                let shape_bbox = shape.get_bbox();
+                match acc {
+                    None => Some(shape_bbox.clone()),
+                    Some(bbox) => Some(BBox::combine(&bbox, shape_bbox)),
+                }
+            }).unwrap();
+
+            return Self {
+                bbox,
+                left: None,
+                right: None,
+                shapes,
+            };
+        }
+
+        // Sort shapes based on their centroids along the current axis
+        shapes.sort_by(|a, b| {
+            let a_centroid = a.get_centroid();
+            let b_centroid = b.get_centroid();
+            match axis {
+                Axis::X => a_centroid.x.partial_cmp(&b_centroid.x).unwrap(),
+                Axis::Y => a_centroid.y.partial_cmp(&b_centroid.y).unwrap(),
+                Axis::Z => a_centroid.z.partial_cmp(&b_centroid.z).unwrap(),
+            }
+        });
+
+        // Split shapes into two groups
+        let mid = shapes.len() / 2;
+        let right_shapes = shapes.split_off(mid);
+
+        // Recursively build child nodes
+        let left = Box::new(Self::new(shapes, axis.next()));
+        let right = Box::new(Self::new(right_shapes, axis.next()));
+
+        // Calculate bounding box for this node
+        let bbox = BBox::combine(left.bbox(), right.bbox());
+
+        Self {
+            bbox,
+            left: Some(left),
+            right: Some(right),
+            shapes: Vec::new(), // Internal nodes don't store shapes
+        }
+    }
+
+    pub fn bbox(&self) -> &BBox {
+        &self.bbox
+    }
+
+    pub fn intersect<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+        // First check if ray intersects this node's bounding box
+        if self.bbox.hit(&hit.ray, hit.t_min, hit.t).is_none() {
+            return false;
+        }
+
+        let mut hit_anything = false;
+
+        // If this is a leaf node, check all shapes
+        if !self.shapes.is_empty() {
+            for shape in &self.shapes {
+                if shape.closest_hit(hit) {
+                    hit_anything = true;
+                }
+            }
+            return hit_anything;
+        }
+
+        // Otherwise, recurse into children
+        if let Some(left) = &self.left {
+            if left.intersect(hit) {
+                hit_anything = true;
+            }
+        }
+
+        if let Some(right) = &self.right {
+            if right.intersect(hit) {
+                hit_anything = true;
+            }
+        }
+
+        hit_anything
+    }
+}
+
+#[derive(Debug)]
+pub struct BVH {
+    root: BVHNode,
+}
+
+impl BVH {
+    pub fn new(shapes: Vec<Arc<dyn Shape>>) -> Self {
+        Self {
+            root: BVHNode::new(shapes, Axis::X),
+        }
+    }
+
+    pub fn intersect<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+        self.root.intersect(hit)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::{Sphere, Triangle};
+    use crate::shader::NormalShader;
+
+    #[test]
+    fn test_bvh_construction() {
+        let shader = Arc::new(NormalShader::new());
+        let shapes: Vec<Arc<dyn Shape>> = vec![
+            Arc::new(Sphere::new(
+                vec3!(0.0, 0.0, -5.0),
+                1.0,
+                shader.clone(),
+                "sphere1",
+            )),
+            Arc::new(Sphere::new(
+                vec3!(2.0, 0.0, -5.0),
+                1.0,
+                shader.clone(),
+                "sphere2",
+            )),
+        ];
+
+        let bvh = BVH::new(shapes);
+        assert!(bvh.root.bbox.hit(
+            &Ray {
+                origin: vec3!(0.0, 0.0, 0.0),
+                direction: vec3!(0.0, 0.0, -1.0),
+            },
+            0.0,
+            f64::INFINITY,
+        ).is_some());
+    }
+}
