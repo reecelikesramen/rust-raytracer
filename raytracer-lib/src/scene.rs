@@ -2,13 +2,13 @@ use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
     geometry::Sphere,
-    light::PointLight,
+    light::{AmbientLight, PointLight},
     prelude::*,
-    shader::{LambertianShader, Shader},
+    shader::{BlinnPhongShader, Hit, LambertianShader, Shader},
 };
 use nalgebra::Vector3;
 use serde::{de, Deserialize, Deserializer};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::{convert::TryInto, str::FromStr, sync::Arc};
 
 fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String>
@@ -63,7 +63,8 @@ pub struct SceneData {
     camera: Vec<CameraData>,
     light: Vec<LightData>,
     shader: Vec<ShaderType>,
-    shape: Vec<ShapeType>,
+    // shape: Vec<ShapeType>,
+    shape: Vec<ShapeData>,
     #[serde(
         rename = "_bgColor",
         default,
@@ -134,7 +135,7 @@ pub struct BlinnPhongShaderData {
     #[serde(deserialize_with = "deserialize_vec3")]
     specular: Color,
     #[serde(rename = "phongExp")]
-    phong_exp: Real,
+    phong_exp: f32,
     #[serde(rename = "_name")]
     name: String,
 }
@@ -153,6 +154,16 @@ pub struct ShaderRef {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct ShapeData {
+    #[serde(rename = "_name")]
+    name: String,
+    #[serde(rename = "shader")]
+    shader: ShaderRef,
+    #[serde(flatten)]
+    shape: ShapeType,
+}
+
+#[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
 pub enum ShapeType {
     #[serde(rename = "sphere")]
@@ -163,25 +174,25 @@ pub enum ShapeType {
 
 #[derive(Deserialize, Debug)]
 pub struct SphereData {
-    #[serde(rename = "shader")]
-    shader: ShaderRef,
+    // #[serde(rename = "shader")]
+    // shader: ShaderRef,
     #[serde(deserialize_with = "deserialize_vec3")]
     center: Vec3,
     radius: Real,
-    #[serde(rename = "_name")]
-    name: String,
+    // #[serde(rename = "_name")]
+    // name: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct BoxData {
-    #[serde(rename = "shader")]
-    shader: ShaderRef,
+    // #[serde(rename = "shader")]
+    // shader: ShaderRef,
     #[serde(rename = "minPt", deserialize_with = "deserialize_vec3")]
     min_point: Vec3,
     #[serde(rename = "maxPt", deserialize_with = "deserialize_vec3")]
     max_point: Vec3,
-    #[serde(rename = "_name")]
-    name: String,
+    // #[serde(rename = "_name")]
+    // name: String,
 }
 
 pub fn load_scene(
@@ -245,15 +256,23 @@ pub fn load_scene(
     camera.set_image_pixels(image_width, image_height);
 
     // Create shaders
-    let mut shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>> = HashMap::new();
+    let mut shaders: HashMap<String, Arc<dyn crate::shader::Shader>> = HashMap::new();
     for shader in scene.shader.iter() {
         match shader {
             ShaderType::Lambertian(lambertian) => {
-                // Convert the name to a static str - this is safe as long as the names are constant
-                let name = Box::leak(lambertian.name.clone().into_boxed_str());
                 shaders.insert(
-                    name,
-                    Arc::new(LambertianShader::new(name, lambertian.diffuse, None)),
+                    lambertian.name.clone(),
+                    Arc::new(LambertianShader::new(lambertian.diffuse)),
+                );
+            }
+            ShaderType::BlinnPhong(blinn_phong) => {
+                shaders.insert(
+                    blinn_phong.name.clone(),
+                    Arc::new(BlinnPhongShader::new(
+                        blinn_phong.diffuse,
+                        blinn_phong.specular,
+                        blinn_phong.phong_exp,
+                    )),
                 );
             }
             _ => {
@@ -262,22 +281,32 @@ pub fn load_scene(
         }
     }
 
+    // create a set of names for the shapes to that names are unique
+    let mut shape_names: HashSet<&str> = HashSet::new();
+
     // Create shapes
     let mut shapes: Vec<Box<dyn crate::geometry::Shape>> = Vec::new();
     for shape in scene.shape.iter() {
-        match shape {
+        // extract shader
+        let shader = match shaders.get(&shape.shader.name) {
+            Some(s) => Arc::clone(s),
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "shape references non-existent shader",
+                )))
+            }
+        };
+
+        let shape_name = Box::leak(shape.name.clone().into_boxed_str());
+        if !shape_names.insert(shape_name) {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "shape names must be unique",
+            )));
+        }
+        match &shape.shape {
             ShapeType::Sphere(sphere) => {
-                let shader_name = Box::leak(sphere.shader.name.clone().into_boxed_str());
-                let shader = match shaders.get(shader_name) {
-                    Some(s) => Arc::clone(s),
-                    None => {
-                        return Err(Box::new(std::io::Error::new(
-                            std::io::ErrorKind::InvalidData,
-                            "shape references non-existent shader",
-                        )))
-                    }
-                };
-                let shape_name = Box::leak(sphere.name.clone().into_boxed_str());
                 let shape = Sphere::new(sphere.center, sphere.radius, shader, shape_name);
                 shapes.push(Box::new(shape));
             }
@@ -298,6 +327,10 @@ pub fn load_scene(
         match light.light_type.as_str() {
             "point" => {
                 let light = PointLight::new(light.position, light.intensity);
+                lights.push(Box::new(light));
+            }
+            "ambient" => {
+                let light = AmbientLight::new(light.intensity);
                 lights.push(Box::new(light));
             }
             _ => {
@@ -323,8 +356,17 @@ pub struct Scene {
     pub background_color: Color,
     pub camera: Box<dyn crate::camera::Camera>,
     pub shapes: Vec<Box<dyn crate::geometry::Shape>>,
-    pub shaders: HashMap<&'static str, Arc<dyn crate::shader::Shader>>,
+    pub shaders: HashMap<String, Arc<dyn crate::shader::Shader>>,
     pub lights: Vec<Box<dyn crate::light::Light>>,
 }
 
-// impl<'a> Scene<'a> {}
+impl Scene {
+    pub fn any_hit<'hit>(&'hit self, hit: &'hit mut Hit<'hit>) -> bool {
+        for shape in &self.shapes {
+            if shape.closest_hit(hit) {
+                return true;
+            }
+        }
+        false
+    }
+}
