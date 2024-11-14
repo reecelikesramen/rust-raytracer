@@ -22,6 +22,23 @@ impl Cuboid {
             name,
         }
     }
+
+    fn normal(&self, hit_point: &Vec3) -> Vec3 {
+        let point_to_center = hit_point - self.bbox.centroid;
+        let norm_dist_along_axes = point_to_center.component_div(&self.bbox.extent).abs();
+
+        let dx = norm_dist_along_axes.x;
+        let dy = norm_dist_along_axes.y;
+        let dz = norm_dist_along_axes.z;
+
+        if dx > dy && dx > dz {
+            vec3!(if point_to_center.x > 0.0 { 1.0 } else { -1.0 }, 0.0, 0.0)
+        } else if dy > dz {
+            vec3!(0.0, if point_to_center.y > 0.0 { 1.0 } else { -1.0 }, 0.0)
+        } else {
+            vec3!(0.0, 0.0, if point_to_center.z > 0.0 { 1.0 } else { -1.0 })
+        }
+    }
 }
 
 impl Shape for Cuboid {
@@ -48,20 +65,8 @@ impl Shape for Cuboid {
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
         if let Some(t) = self.bbox.hit(&hit.ray, hit.t_min, hit.t) {
             hit.t = t;
+            hit.normal = self.normal(&hit.hit_point());
             hit.shape = Some(self);
-
-            let point_to_center = hit.hit_point() - self.bbox.centroid;
-            let norm_dist_along_axes = point_to_center.component_div(&self.bbox.extent);
-
-            let [dx, dy, dz] = norm_dist_along_axes.into();
-
-            if dx > dy && dx > dz {
-                hit.normal = vec3!(if point_to_center.x > 0.0 { 1.0 } else { -1.0 }, 0.0, 0.0);
-            } else if dy > dz {
-                hit.normal = vec3!(0.0, if point_to_center.y > 0.0 { 1.0 } else { -1.0 }, 0.0);
-            } else {
-                hit.normal = vec3!(0.0, 0.0, if point_to_center.z > 0.0 { 1.0 } else { -1.0 });
-            }
 
             return true;
         }
