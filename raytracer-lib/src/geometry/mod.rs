@@ -4,6 +4,7 @@ mod bbox;
 mod cuboid;
 mod sphere;
 mod triangle;
+mod bvh;
 
 pub use self::bbox::BBox;
 pub use self::cuboid::Cuboid;
