@@ -8,6 +8,7 @@ mod triangle;
 pub use self::bbox::BBox;
 pub use self::cuboid::Cuboid;
 pub use self::sphere::Sphere;
+pub use self::triangle::Triangle;
 
 pub enum ShapeType {
     Sphere,
