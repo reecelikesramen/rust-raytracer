@@ -74,25 +74,16 @@ impl Shape for Sphere {
 
         if valid_t_range.contains(&t1) && valid_t_range.contains(&t2) {
             hit.t = t1.min(t2);
-            hit.normal = self.normal(&hit.hit_point());
-            hit.shape = Some(self);
-            return true;
-        }
-
-        if valid_t_range.contains(&t1) {
+        } else if valid_t_range.contains(&t1) {
             hit.t = t1;
-            hit.normal = self.normal(&hit.hit_point());
-            hit.shape = Some(self);
-            return true;
-        }
-
-        if valid_t_range.contains(&t2) {
+        } else if valid_t_range.contains(&t2) {
             hit.t = t2;
-            hit.normal = self.normal(&hit.hit_point());
-            hit.shape = Some(self);
-            return true;
+        } else {
+            return false;
         }
 
-        false
+        hit.normal = self.normal(&hit.hit_point());
+        hit.shape = Some(self);
+        true
     }
 }
