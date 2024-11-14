@@ -4,7 +4,7 @@ use crate::{
     geometry::{Cuboid, Shape, Sphere, Triangle},
     light::{AmbientLight, Light, PointLight},
     prelude::*,
-    shader::{BlinnPhongShader, Hit, LambertianShader, Shader},
+    shader::{BlinnPhongShader, Hit, LambertianShader, NormalShader, Shader},
 };
 use nalgebra::Vector3;
 use serde::{de, Deserialize, Deserializer};
@@ -217,6 +217,7 @@ pub fn load_scene(
     image_height: u32,
     aspect_ratio: Real,
     disable_shadows: bool,
+    render_normals: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
     let file = std::fs::File::open(path)?;
     let reader = std::io::BufReader::new(file);
@@ -297,21 +298,28 @@ pub fn load_scene(
         }
     }
 
+    // normal shader
+    let normal_shader = Arc::new(NormalShader::default());
+
     // create a set of names for the shapes to that names are unique
     let mut shape_names: HashSet<&str> = HashSet::new();
 
     // Create shapes
     let mut shapes: Vec<Box<dyn crate::geometry::Shape>> = Vec::new();
     for shape in scene.shape.iter() {
-        // extract shader
-        let shader = match shaders.get(&shape.shader.name) {
-            Some(s) => Arc::clone(s),
-            None => {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "shape references non-existent shader",
-                )))
+        // extract shader, or just use normal shader
+        let shader = if !render_normals {
+            match shaders.get(&shape.shader.name) {
+                Some(s) => Arc::clone(s),
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "shape references non-existent shader",
+                    )))
+                }
             }
+        } else {
+            Arc::clone(&normal_shader)
         };
 
         let shape_name = Box::leak(shape.name.clone().into_boxed_str());
@@ -361,9 +369,15 @@ pub fn load_scene(
         lights.push(light);
     }
 
+    let background_color = if render_normals {
+        color!(0.0, 0.0, 0.0)
+    } else {
+        scene.background_color.unwrap_or_default()
+    };
+
     let scene = Scene {
         disable_shadows,
-        background_color: scene.background_color.unwrap_or(color!(0.0, 0.0, 0.0)),
+        background_color,
         camera,
         shapes,
         shaders,
