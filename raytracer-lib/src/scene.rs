@@ -1,7 +1,7 @@
 use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
-    geometry::{Cuboid, Shape, Sphere, Triangle},
+    geometry::{Cuboid, Shape, Sphere, Triangle, BVH},
     light::{AmbientLight, Light, PointLight},
     prelude::*,
     shader::{BlinnPhongShader, Hit, LambertianShader, NormalShader, Shader},
@@ -224,7 +224,8 @@ pub fn load_scene(
     let scene_file: SceneFile = serde_json::from_reader(reader)?;
     let scene = scene_file.scene;
 
-    // print scene
+    // print scene data
+    #[cfg(debug_assertions)]
     println!("{:#?}", scene);
 
     // Check that there is exactly one camera
@@ -305,7 +306,7 @@ pub fn load_scene(
     let mut shape_names: HashSet<&str> = HashSet::new();
 
     // Create shapes
-    let mut shapes: Vec<Box<dyn crate::geometry::Shape>> = Vec::new();
+    let mut shapes: Vec<Arc<dyn Shape>> = Vec::new();
     for shape in scene.shape.iter() {
         // extract shader, or just use normal shader
         let shader = if !render_normals {
@@ -329,20 +330,20 @@ pub fn load_scene(
                 "shape names must be unique",
             )));
         }
-        let shape: Box<dyn Shape> = match &shape.shape {
-            ShapeType::Sphere(sphere) => Box::new(Sphere::new(
+        let shape: Arc<dyn Shape> = match &shape.shape {
+            ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
                 sphere.center,
                 sphere.radius,
                 shader,
                 shape_name,
             )),
-            ShapeType::Box(cuboid) => Box::new(Cuboid::new(
+            ShapeType::Box(cuboid) => Arc::new(Cuboid::new(
                 cuboid.min_point,
                 cuboid.max_point,
                 shader,
                 shape_name,
             )),
-            ShapeType::Triangle(triangle) => Box::new(Triangle::new(
+            ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
                 triangle.a, triangle.b, triangle.c, shader, shape_name,
             )),
             _ => {
@@ -375,6 +376,9 @@ pub fn load_scene(
         scene.background_color.unwrap_or_default()
     };
 
+    let shape_refs = shapes.clone();
+    let bvh = BVH::new(shape_refs);
+
     let scene = Scene {
         disable_shadows,
         background_color,
@@ -382,6 +386,7 @@ pub fn load_scene(
         shapes,
         shaders,
         lights,
+        bvh,
     };
     return Ok(scene);
 }
@@ -391,18 +396,8 @@ pub struct Scene {
     pub disable_shadows: bool,
     pub background_color: Color,
     pub camera: Box<dyn crate::camera::Camera>,
-    pub shapes: Vec<Box<dyn crate::geometry::Shape>>,
+    pub shapes: Vec<Arc<dyn Shape>>,
     pub shaders: HashMap<String, Arc<dyn crate::shader::Shader>>,
     pub lights: Vec<Box<dyn crate::light::Light>>,
-}
-
-impl Scene {
-    pub fn any_hit<'hit>(&'hit self, hit: &'hit mut Hit<'hit>) -> bool {
-        for shape in &self.shapes {
-            if shape.closest_hit(hit) {
-                return true;
-            }
-        }
-        false
-    }
+    pub bvh: BVH,
 }

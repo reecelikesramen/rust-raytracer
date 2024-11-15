@@ -5,6 +5,7 @@ use crate::{
     scene::{self, Scene},
 };
 
+/// <'hit> lifetimes lives as long as a single pixel render takes.
 pub struct Hit<'hit> {
     pub t: Real,
     pub t_min: Real,

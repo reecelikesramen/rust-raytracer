@@ -31,7 +31,7 @@ impl Light for PointLight {
         let mut shadow_hit = Hit::to_light(surface_to_light, &hit.scene);
 
         // if shadows are enabled and a shape blocks the light
-        if !hit.scene.disable_shadows && hit.scene.any_hit(&mut shadow_hit) {
+        if !hit.scene.disable_shadows && hit.scene.bvh.closest_hit(&mut shadow_hit) {
             return None;
         }
 
