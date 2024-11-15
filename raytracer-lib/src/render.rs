@@ -28,18 +28,9 @@ pub fn render(
             let ray = scene.camera.generate_ray(i, j, di, dj);
             let mut hit = Hit::new(ray, &scene);
 
-            // TODO: scene.closestHit
-            for shape in &scene.shapes {
-                if shape.closest_hit(&mut hit) {
-                    // print!("hello");
-                    // if let Some(s) = hit.shape {
-                    // 	if let Some(sp) = (&s as &dyn Any).downcast_ref::<Sphere>() {
-                    // 		print!("sphere!")
-                    // 	}
-                    // }
-                    any_hit = true;
-                    color = hit.shape.unwrap().get_shader().apply(&hit)
-                }
+            if (scene.bvh.closest_hit(&mut hit)) {
+                any_hit = true;
+                color = hit.shape.unwrap().get_shader().apply(&hit);
             }
 
             if !any_hit {

@@ -24,8 +24,8 @@ struct RayTracerArgs {
     rays_per_pixel: u16,
     #[arg(short = 'd', long = "recursion-depth", default_value_t = 4)]
     recursion_depth: u16,
-    #[arg(long = "aspect-ratio", default_value_t = 1.0)]
-    aspect_ratio: f64,
+    #[arg(long = "aspect-ratio", default_value=None)]
+    aspect_ratio: Option<f64>,
     #[arg(long = "disable-shadows", default_value_t = false)]
     disable_shadows: bool,
     #[arg(long = "render-normals", default_value_t = false)]
@@ -34,22 +34,24 @@ struct RayTracerArgs {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = RayTracerArgs::parse();
+
+    #[cfg(debug_assertions)]
     println!("{:?}", args);
 
-    // print working directory
-    println!(
-        "Working directory: {}",
-        std::env::current_dir().unwrap().display()
-    );
+    let aspect_ratio = args
+        .aspect_ratio
+        .unwrap_or(args.width as f64 / args.height as f64);
 
     let scene = load_scene(
         &args.scene_path,
         args.width,
         args.height,
-        args.aspect_ratio,
+        aspect_ratio,
         args.disable_shadows,
         args.render_normals,
     )?;
+
+    #[cfg(debug_assertions)]
     println!("{:#?}", scene);
 
     let pb = indicatif::ProgressBar::new(args.width as u64 * args.height as u64);
