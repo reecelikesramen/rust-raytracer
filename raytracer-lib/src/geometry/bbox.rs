@@ -40,7 +40,7 @@ impl BBox {
         // Handle x-axis intersection
         let mut tmin_x = r_to_min.x / dir.x;
         let mut tmax_x = r_to_max.x / dir.x;
-        if (1.0 / dir.x) < 0.0 {
+        if 1.0 / dir.x < 0.0 {
             std::mem::swap(&mut tmin_x, &mut tmax_x);
         }
 
@@ -55,7 +55,7 @@ impl BBox {
         // Handle y-axis intersection
         let mut tmin_y = r_to_min.y / dir.y;
         let mut tmax_y = r_to_max.y / dir.y;
-        if (1.0 / dir.y) < 0.0 {
+        if 1.0 / dir.y < 0.0 {
             std::mem::swap(&mut tmin_y, &mut tmax_y);
         }
 
@@ -70,7 +70,7 @@ impl BBox {
         // Handle z-axis intersection
         let mut tmin_z = r_to_min.z / dir.z;
         let mut tmax_z = r_to_max.z / dir.z;
-        if (1.0 / dir.z) < 0.0 {
+        if 1.0 / dir.z < 0.0 {
             std::mem::swap(&mut tmin_z, &mut tmax_z);
         }
 

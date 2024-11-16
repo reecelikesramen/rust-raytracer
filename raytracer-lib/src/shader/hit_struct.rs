@@ -1,5 +1,4 @@
 use crate::{
-    constants::VERY_SMALL_NUMBER,
     math::Ray,
     prelude::*,
     scene::{self, Scene},

@@ -11,20 +11,19 @@ use std::{
 
 use crate::prelude::*;
 
+mod antialias;
 mod camera;
-mod constants;
 mod framebuffer;
 mod geometry;
+mod light;
 mod math;
 mod prelude;
 mod render;
 mod scene;
 mod shader;
-mod light;
 
-use camera::Camera;
+pub use antialias::AntialiasMethod;
 pub use framebuffer::Framebuffer;
 pub use render::render;
 pub use scene::load_scene;
 pub use scene::Scene;
-use shader::{LambertianShader, Shader};

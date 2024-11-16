@@ -1,4 +1,4 @@
-use crate::{color, constants::DEFAULT_AMBIENT_LIGHT, light::Light, prelude::*};
+use crate::{color, light::Light, prelude::*};
 
 use super::Shader;
 
