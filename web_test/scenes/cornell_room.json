@@ -41,8 +41,8 @@
       {
         "_name": "mirrorMat",
         "_type": "GGXMirror",
-        "roughness": 0.03,
-        "samples": 16
+        "roughness": 0.1,
+        "samples": 4
       }
     ],
     "shape": [

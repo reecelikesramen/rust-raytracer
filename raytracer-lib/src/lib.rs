@@ -25,6 +25,6 @@ mod shader;
 pub use antialias::AntialiasMethod;
 pub use framebuffer::Framebuffer;
 pub use prelude::public_consts;
-pub use render::{render, render_mut};
+pub use render::{render, render_mut, render_pixel};
 pub use scene::parse_scene;
 pub use scene::Scene;

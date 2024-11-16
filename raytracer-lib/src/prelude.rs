@@ -49,6 +49,6 @@ pub mod public_consts {
     pub static DEFAULT_IMAGE_WIDTH: u32 = 360;
     pub static DEFAULT_IMAGE_HEIGHT: u32 = 360;
     pub static DEFAULT_RAYS_PER_PIXEL: u16 = 4;
-    pub static DEFAULT_RECURSION_DEPTH: u16 = 6;
+    pub static DEFAULT_RECURSION_DEPTH: u16 = 3;
     pub static DEFAULT_ANTIALIAS_METHOD: AntialiasMethod = AntialiasMethod::Normal;
 }
