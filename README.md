@@ -5,8 +5,8 @@
 ### Build CLI
 `cargo build -p raytracer-cli --release`
 
-### Build only the library crate for WASM by running
-`cargo build -p raytracer-lib --target wasm32-unknown-unknown`
+### Build the WASM binding
+`cargo build -p raytracer-wasm --target wasm32-unknown-unknown`
 
 ## Main Goals
 - Recreate my [raytracer](https://github.com/reecelikesramen/raytracer) project from CS 4212 Computer Graphics in Rust.

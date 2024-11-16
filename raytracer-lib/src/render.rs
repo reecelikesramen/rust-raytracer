@@ -23,6 +23,7 @@ pub fn render(
         sqrt_rays_per_pixel,
         antialias_method,
         per_pixel_cb,
+        None,
     );
     fb
 }
@@ -33,10 +34,13 @@ pub fn render_mut(
     sqrt_rays_per_pixel: u16,
     antialias_method: AntialiasMethod,
     per_pixel_cb: Option<&dyn Fn() -> ()>,
+    wasm_log: Option<&dyn Fn(&str) -> ()>,
 ) {
     let width = scene.image_width;
     let height = scene.image_height;
     let cb = per_pixel_cb.unwrap_or(&NOP_CB);
+    let wasm_log = wasm_log.unwrap_or(&|_| {});
+
     for i in 0..width {
         for j in 0..height {
             let mut any_hit = false;
@@ -60,6 +64,7 @@ pub fn render_mut(
 
             cb();
             fb.set_pixel(i, j, color);
+            // wasm_log(&format!("On pixel {} {}", i, j));
         }
     }
 }
