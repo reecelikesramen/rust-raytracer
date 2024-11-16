@@ -12,14 +12,31 @@ static NOP_CB: fn() -> () = || {};
 
 pub fn render(
     scene: &Scene,
-    width: u32,
-    height: u32,
     sqrt_rays_per_pixel: u16,
     antialias_method: AntialiasMethod,
     per_pixel_cb: Option<&dyn Fn() -> ()>,
 ) -> Framebuffer {
+    let mut fb = Framebuffer::new(scene.image_width, scene.image_width);
+    render_mut(
+        &mut fb,
+        scene,
+        sqrt_rays_per_pixel,
+        antialias_method,
+        per_pixel_cb,
+    );
+    fb
+}
+
+pub fn render_mut(
+    fb: &mut Framebuffer,
+    scene: &Scene,
+    sqrt_rays_per_pixel: u16,
+    antialias_method: AntialiasMethod,
+    per_pixel_cb: Option<&dyn Fn() -> ()>,
+) {
+    let width = scene.image_width;
+    let height = scene.image_height;
     let cb = per_pixel_cb.unwrap_or(&NOP_CB);
-    let mut fb = Framebuffer::new(width, height);
     for i in 0..width {
         for j in 0..height {
             let mut any_hit = false;
@@ -45,6 +62,4 @@ pub fn render(
             fb.set_pixel(i, j, color);
         }
     }
-
-    fb
 }

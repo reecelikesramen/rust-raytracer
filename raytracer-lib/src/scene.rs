@@ -226,18 +226,16 @@ struct TriangleData {
     c: Vec3,
 }
 
-pub fn load_scene(
-    path: &str,
-    image_width: u32,
-    image_height: u32,
-    aspect_ratio: Real,
-    recursion_depth: u16,
+pub fn parse_scene(
+    scene_json: &str,
+    image_width: Option<u32>,
+    image_height: Option<u32>,
+    aspect_ratio: Option<Real>,
+    recursion_depth: Option<u16>,
     disable_shadows: bool,
     render_normals: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
-    let file = std::fs::File::open(path)?;
-    let reader = std::io::BufReader::new(file);
-    let scene_file: SceneFile = serde_json::from_reader(reader)?;
+    let scene_file: SceneFile = serde_json::from_str(scene_json)?;
     let scene = scene_file.scene;
 
     // print scene data
@@ -266,6 +264,13 @@ pub fn load_scene(
         // calculate view dir from camera position and lookat point
         None => scene.camera[0].lookat_point.unwrap() - scene.camera[0].position,
     };
+
+    // Image size or default
+    let image_width = image_width.unwrap_or(DEFAULT_IMAGE_WIDTH);
+    let image_height = image_height.unwrap_or(DEFAULT_IMAGE_HEIGHT);
+
+    // Calculate aspect ratio if not specified
+    let aspect_ratio = aspect_ratio.unwrap_or(image_width as Real / image_height as Real);
 
     // Create camera
     let mut camera: Box<dyn crate::camera::Camera> = match scene.camera[0].camera_type.as_str() {
@@ -401,7 +406,9 @@ pub fn load_scene(
         shaders,
         lights,
         bvh,
-        recursion_depth,
+        recursion_depth: recursion_depth.unwrap_or(DEFAULT_RECURSION_DEPTH),
+        image_width,
+        image_height,
     };
     return Ok(scene);
 }
@@ -416,4 +423,6 @@ pub struct Scene {
     pub lights: Vec<Box<dyn crate::light::Light>>,
     pub bvh: BVH,
     pub recursion_depth: u16,
+    pub image_width: u32,
+    pub image_height: u32,
 }
