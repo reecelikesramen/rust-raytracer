@@ -26,13 +26,13 @@ macro_rules! color {
 }
 
 pub use constants::*;
+pub use public_consts::*;
 
 mod constants {
     use crate::prelude::*;
 
     pub(crate) static INFINITY: Real = Real::INFINITY;
     pub(crate) static DEFAULT_IMAGE_PLANE_WIDTH: Real = 0.5;
-    pub(crate) static DEFAULT_ASPECT_RATIO: Real = 0.5;
     pub(crate) static ERROR_COLOR: Color = color!(1.0, 0.0, 1.0);
     pub(crate) static DEFAULT_BACKGROUND_COLOR: Color = color!(0.198, 0.198, 0.198);
     pub(crate) static VERY_SMALL_NUMBER: Real = 1e-6;
@@ -41,4 +41,14 @@ mod constants {
     pub(crate) static PI: Real = std::f64::consts::PI;
     #[cfg(feature = "f32")]
     pub(crate) static PI: Real = std::f32::consts::PI;
+}
+
+pub mod public_consts {
+    use crate::AntialiasMethod;
+
+    pub static DEFAULT_IMAGE_WIDTH: u32 = 360;
+    pub static DEFAULT_IMAGE_HEIGHT: u32 = 360;
+    pub static DEFAULT_RAYS_PER_PIXEL: u16 = 4;
+    pub static DEFAULT_RECURSION_DEPTH: u16 = 6;
+    pub static DEFAULT_ANTIALIAS_METHOD: AntialiasMethod = AntialiasMethod::Normal;
 }
