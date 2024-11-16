@@ -4,12 +4,19 @@ use crate::{
     geometry::{Cuboid, Shape, Sphere, Triangle, BVH},
     light::{AmbientLight, Light, PointLight},
     prelude::*,
-    shader::{BlinnPhongShader, Hit, LambertianShader, NormalShader, Shader},
+    shader::{
+        BlinnPhongShader, GGXMirrorShader, Hit, LambertianShader, NormalShader,
+        PerfectMirrorShader, Shader,
+    },
 };
 use nalgebra::Vector3;
 use serde::{de, Deserialize, Deserializer};
-use std::collections::{HashMap, HashSet};
-use std::{convert::TryInto, str::FromStr, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    convert::TryInto,
+    str::FromStr,
+    sync::Arc,
+};
 
 fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String>
 where
@@ -62,7 +69,7 @@ struct SceneFile {
 struct SceneData {
     camera: Vec<CameraData>,
     light: Vec<LightType>,
-    shader: Vec<ShaderType>,
+    shader: Vec<ShaderData>,
     shape: Vec<ShapeData>,
     #[serde(
         rename = "_bgColor",
@@ -122,6 +129,14 @@ struct AmbientLightData {
 }
 
 #[derive(Deserialize, Debug)]
+struct ShaderData {
+    #[serde(rename = "_name")]
+    name: String,
+    #[serde(flatten)]
+    shader: ShaderType,
+}
+
+#[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
 enum ShaderType {
     #[serde(rename = "Lambertian")]
@@ -129,15 +144,15 @@ enum ShaderType {
     #[serde(rename = "BlinnPhong")]
     BlinnPhong(BlinnPhongShaderData),
     #[serde(rename = "Mirror")]
-    Mirror(MirrorShaderData),
+    PerfectMirror(PerfectMirrorShaderData),
+    #[serde(rename = "GGXMirror")]
+    GGXMirror(GGXMirrorShaderData),
 }
 
 #[derive(Deserialize, Debug)]
 struct LambertianShaderData {
     #[serde(deserialize_with = "deserialize_vec3")]
     diffuse: Color,
-    #[serde(rename = "_name")]
-    name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -147,16 +162,16 @@ struct BlinnPhongShaderData {
     #[serde(deserialize_with = "deserialize_vec3")]
     specular: Color,
     #[serde(rename = "phongExp")]
-    phong_exp: f32,
-    #[serde(rename = "_name")]
-    name: String,
+    shininess: f32,
 }
 
 #[derive(Deserialize, Debug)]
-struct MirrorShaderData {
+struct PerfectMirrorShaderData {}
+
+#[derive(Deserialize, Debug)]
+struct GGXMirrorShaderData {
     roughness: Real,
-    #[serde(rename = "_name")]
-    name: String,
+    samples: u32,
 }
 
 #[derive(Deserialize, Debug)]
@@ -216,6 +231,7 @@ pub fn load_scene(
     image_width: u32,
     image_height: u32,
     aspect_ratio: Real,
+    recursion_depth: u16,
     disable_shadows: bool,
     render_normals: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
@@ -276,27 +292,25 @@ pub fn load_scene(
     // Create shaders
     let mut shaders: HashMap<String, Arc<dyn crate::shader::Shader>> = HashMap::new();
     for shader in scene.shader.iter() {
-        match shader {
+        let shader_name = shader.name.clone();
+        let shader: Arc<dyn Shader> = match &shader.shader {
             ShaderType::Lambertian(lambertian) => {
-                shaders.insert(
-                    lambertian.name.clone(),
-                    Arc::new(LambertianShader::new(lambertian.diffuse)),
-                );
+                Arc::new(LambertianShader::new(lambertian.diffuse))
             }
-            ShaderType::BlinnPhong(blinn_phong) => {
-                shaders.insert(
-                    blinn_phong.name.clone(),
-                    Arc::new(BlinnPhongShader::new(
-                        blinn_phong.diffuse,
-                        blinn_phong.specular,
-                        blinn_phong.phong_exp,
-                    )),
-                );
+            ShaderType::BlinnPhong(blinn_phong) => Arc::new(BlinnPhongShader::new(
+                blinn_phong.diffuse,
+                blinn_phong.specular,
+                blinn_phong.shininess,
+            )),
+            ShaderType::PerfectMirror(mirror) => Arc::new(PerfectMirrorShader::default()),
+            ShaderType::GGXMirror(mirror) => {
+                Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
             }
             _ => {
                 unimplemented!("shader type not supported yet")
             }
-        }
+        };
+        shaders.insert(shader_name, shader);
     }
 
     // normal shader
@@ -373,7 +387,7 @@ pub fn load_scene(
     let background_color = if render_normals {
         color!(0.0, 0.0, 0.0)
     } else {
-        scene.background_color.unwrap_or_default()
+        scene.background_color.unwrap_or(DEFAULT_BACKGROUND_COLOR)
     };
 
     let shape_refs = shapes.clone();
@@ -387,6 +401,7 @@ pub fn load_scene(
         shaders,
         lights,
         bvh,
+        recursion_depth,
     };
     return Ok(scene);
 }
@@ -400,4 +415,5 @@ pub struct Scene {
     pub shaders: HashMap<String, Arc<dyn crate::shader::Shader>>,
     pub lights: Vec<Box<dyn crate::light::Light>>,
     pub bvh: BVH,
+    pub recursion_depth: u16,
 }
