@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use js_sys::Float32Array;
-use raytracer_lib::{parse_scene, public_consts, render_mut, Framebuffer};
+use js_sys::{Float32Array, Promise};
+use raytracer_lib::{parse_scene, public_consts, render_mut, render_pixel, Framebuffer, Scene};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext, WebGlContextAttributes, WebGlProgram, WebGlShader};
@@ -32,27 +32,67 @@ macro_rules! log {
 }
 
 #[wasm_bindgen]
-pub struct PixelRenderer {
+pub struct RayTracer {
     context: WebGl2RenderingContext,
-    program: WebGlProgram,
-    width: u32,
-    height: u32,
     fb: Framebuffer,
+    scene: Scene,
+    sqrt_rays_per_pixel: u16,
+    antialias_method: raytracer_lib::AntialiasMethod,
+    next_pixel: (u32, u32),
+    pub complete: bool,
 }
 
 #[wasm_bindgen]
-impl PixelRenderer {
+impl RayTracer {
     #[wasm_bindgen(constructor)]
-    pub fn new(width: u32, height: u32) -> Result<PixelRenderer, JsValue> {
+    pub fn new(
+        canvas_id: &str,
+        scene_json: String,
+        raytracer_args: JsValue,
+    ) -> Result<RayTracer, JsValue> {
         let document = web_sys::window().unwrap().document().unwrap();
-        let canvas = document
-            .create_element("canvas")?
-            .dyn_into::<web_sys::HtmlCanvasElement>()?;
+        let canvas = match document.get_element_by_id(canvas_id) {
+            Some(e) => e.dyn_into::<web_sys::HtmlCanvasElement>()?,
+            None => return Err(JsValue::from_str("Failed to get canvas")),
+        };
 
-        document.body().unwrap().append_child(&canvas)?;
+        // Parse the raytrace args from JSON
+        let args: RayTracerArgs = serde_wasm_bindgen::from_value(raytracer_args)?;
 
-        canvas.set_width(width);
-        canvas.set_height(height);
+        let scene = parse_scene(
+            &scene_json,
+            Some(args.width),
+            Some(args.height),
+            args.aspect_ratio,
+            args.recursion_depth,
+            args.disable_shadows,
+            args.render_normals,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        #[cfg(debug_assertions)]
+        log!("{:#?}", scene);
+
+        let rays_per_pixel = args
+            .rays_per_pixel
+            .unwrap_or(public_consts::DEFAULT_RAYS_PER_PIXEL);
+        let sqrt_rays_per_pixel = (rays_per_pixel as f64).sqrt() as u16;
+
+        // error if rays_per_pixel is not a perfect square
+        if sqrt_rays_per_pixel * sqrt_rays_per_pixel != rays_per_pixel {
+            return Err(JsValue::from_str("rays_per_pixel must be a perfect square"));
+        }
+
+        let antialias_method = match args.antialias_method {
+            Some(ref s) => raytracer_lib::AntialiasMethod::from_str(s).unwrap(),
+            _ => raytracer_lib::AntialiasMethod::Normal,
+        };
+
+        canvas.set_width(args.width);
+        canvas.set_height(args.height);
+
+        #[cfg(debug_assertions)]
+        test_webgl2()?;
 
         let context_attributes = WebGlContextAttributes::new();
         context_attributes.set_alpha(true);
@@ -69,20 +109,21 @@ impl PixelRenderer {
         };
 
         // Add some debug info
-        let version = context.get_parameter(WebGl2RenderingContext::VERSION)?;
-        let vendor = context.get_parameter(WebGl2RenderingContext::VENDOR)?;
-        let renderer = context.get_parameter(WebGl2RenderingContext::RENDERER)?;
+        #[cfg(debug_assertions)]
+        {
+            let version = context.get_parameter(WebGl2RenderingContext::VERSION)?;
+            let vendor = context.get_parameter(WebGl2RenderingContext::VENDOR)?;
+            let renderer = context.get_parameter(WebGl2RenderingContext::RENDERER)?;
 
-        log!("WebGL2 version: {}", version.as_string().unwrap());
-        log!("WebGL2 vendor: {}", vendor.as_string().unwrap());
-        log!("WebGL2 renderer: {}", renderer.as_string().unwrap());
+            log!("WebGL2 version: {}", version.as_string().unwrap());
+            log!("WebGL2 vendor: {}", vendor.as_string().unwrap());
+            log!("WebGL2 renderer: {}", renderer.as_string().unwrap());
+        }
 
         // You can also add this check after getting the context
         if context.is_null() {
             return Err(JsValue::from_str("WebGL2 context is null"));
         }
-
-        log!("I made it");
 
         // Vertex shader - just pass through positions
         let vert_shader = compile_shader(
@@ -145,58 +186,74 @@ impl PixelRenderer {
         );
         context.enable_vertex_attrib_array(position_attrib);
 
-        Ok(PixelRenderer {
+        Ok(RayTracer {
             context,
-            program,
-            width,
-            height,
-            fb: Framebuffer::new(width, height),
+            fb: Framebuffer::new(args.width, args.height),
+            scene,
+            sqrt_rays_per_pixel,
+            antialias_method,
+            next_pixel: (0, 0),
+            complete: false,
         })
     }
 
     #[wasm_bindgen]
-    pub fn raytrace(&mut self, scene_data: String, args: JsValue) -> Result<(), JsValue> {
-        let args: RayTracerArgs = serde_wasm_bindgen::from_value(args)?;
-
-        let scene = parse_scene(
-            &scene_data,
-            Some(args.width),
-            Some(args.height),
-            args.aspect_ratio,
-            args.recursion_depth,
-            args.disable_shadows,
-            args.render_normals,
-        )
-        .map_err(|e| JsValue::from_str(&e.to_string()))?;
-
-        // log!("{:#?}", scene);
-
-        let rays_per_pixel = args
-            .rays_per_pixel
-            .unwrap_or(public_consts::DEFAULT_RAYS_PER_PIXEL);
-        let sqrt_rays_per_pixel = (rays_per_pixel as f64).sqrt() as u16;
-
-        // error if rays_per_pixel is not a perfect square
-        if sqrt_rays_per_pixel * sqrt_rays_per_pixel != rays_per_pixel {
-            return Err(JsValue::from_str("rays_per_pixel must be a perfect square"));
-        }
-
-        let antialias_method = match args.antialias_method {
-            Some(s) => raytracer_lib::AntialiasMethod::from_str(s.as_str()).unwrap(),
-            _ => raytracer_lib::AntialiasMethod::Normal,
-        };
-
+    pub fn raytrace_blocking(&mut self) {
         render_mut(
             &mut self.fb,
-            &scene,
-            sqrt_rays_per_pixel,
-            antialias_method,
+            &self.scene,
+            self.sqrt_rays_per_pixel,
+            self.antialias_method,
             None,
             None,
-            // Some(&wasm_log),
         );
 
-        Ok(())
+        self.complete = true;
+    }
+
+    #[wasm_bindgen]
+    pub fn raytrace_next_pixels(&mut self, num_pixels: u32) -> Promise {
+        let mut count = 0;
+        let (mut i, mut j) = self.next_pixel;
+
+        while i < self.scene.image_width && count < num_pixels {
+            while j < self.scene.image_height && count < num_pixels {
+                render_pixel(
+                    &mut self.fb,
+                    &self.scene,
+                    self.sqrt_rays_per_pixel,
+                    self.antialias_method,
+                    i,
+                    j,
+                    None,
+                    None,
+                );
+
+                count += 1;
+                j += 1;
+            }
+
+            if j >= self.scene.image_height {
+                j = 0;
+                i += 1;
+            }
+        }
+
+        self.next_pixel = (i, j);
+
+        // Check if we've completed the entire image
+        if i >= self.scene.image_width {
+            self.complete = true;
+        }
+
+        // Calculate total pixels processed
+        let total_pixels = if self.complete {
+            (self.scene.image_width * self.scene.image_height) as f64
+        } else {
+            (i * self.scene.image_height + j) as f64
+        };
+
+        Promise::resolve(&JsValue::from_f64(total_pixels))
     }
 
     #[wasm_bindgen]
@@ -234,8 +291,8 @@ impl PixelRenderer {
                     WebGl2RenderingContext::TEXTURE_2D,
                     0,
                     WebGl2RenderingContext::RGB32F as i32,
-                    self.width as i32,
-                    self.height as i32,
+                    self.scene.image_width as i32,
+                    self.scene.image_height as i32,
                     0,
                     WebGl2RenderingContext::RGB,
                     WebGl2RenderingContext::FLOAT,
@@ -303,8 +360,8 @@ fn link_program(
     }
 }
 
-#[wasm_bindgen]
-pub fn test_webgl() -> Result<(), JsValue> {
+#[cfg(debug_assertions)]
+fn test_webgl2() -> Result<(), JsValue> {
     let document = web_sys::window().unwrap().document().unwrap();
     let test_canvas = document.create_element("canvas")?;
     let test_canvas: web_sys::HtmlCanvasElement = test_canvas.dyn_into()?;
