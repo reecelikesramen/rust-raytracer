@@ -23,6 +23,9 @@ Simple sphere scene:
 Spheres and triangles:
 ![4 spheres and 4 triangles arranged to make an intriguing pattern](renders/spheres_and_triangles.png)
 
+Cornell Room:
+![A cube room with a short box and six mirrored spheres inside](renders/cornell_room.png)
+
 1000 spheres:
 ![10 x 10 x 10 spheres equally spaced with various shaders and lights](renders/spheres_1K.png)
 
