@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use js_sys::{Float32Array, Promise};
-use raytracer_lib::{parse_scene, public_consts, render_mut, render_pixel, Framebuffer, Scene};
+use raytracer_lib::{parse_scene, public_consts, render_mut, render_pixel, Framebuffer, Real, Scene};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext, WebGlContextAttributes, WebGlProgram, WebGlShader};
@@ -15,7 +15,7 @@ pub struct RayTracerArgs {
     #[serde(default)]
     recursion_depth: Option<u16>,
     #[serde(default)]
-    aspect_ratio: Option<f64>,
+    aspect_ratio: Option<Real>,
     #[serde(default)]
     disable_shadows: bool,
     #[serde(default)]

@@ -5,14 +5,20 @@
 ### Build CLI
 `cargo build -p raytracer-cli --release`
 
-### Build the WASM binding
-`cargo build -p raytracer-wasm --target wasm32-unknown-unknown`
+### Build the WASM binding (in the web-test branch)
+```sh
+cd raytracer-wasm
+wasm-pack build --target web --out-dir ../web-test/pkg --release
+cd ../web-test
+python -m http.server
+```
+Open http://localhost:8000
 
 ## Main Goals
-- Recreate my [raytracer](https://github.com/reecelikesramen/raytracer) project from CS 4212 Computer Graphics in Rust.
-- Separate the CLI and the core library, enable the library to compile to WASM and invoke from the web browser.
-- Optimize the raytracer with SIMD and CUDA (separate versions) to increase exposure to low-level parallelization.
-- Extend the raytracer with more interesting shaders, shapes, and light types.
+- [x] Recreate my [raytracer](https://github.com/reecelikesramen/raytracer) project from CS 4212 Computer Graphics in Rust.
+- [x] Separate the CLI and the core library, enable the library to compile to WASM and invoke from the web browser.
+- [ ] Optimize the raytracer with SIMD and CUDA (separate versions) to increase exposure to low-level parallelization.
+- [ ] Extend the raytracer with more interesting shaders, shapes, and light types.
 
 ## Examples
 Note: the following scenes were created by Dr. Pete Willemsen at University of Minnesota Duluth.

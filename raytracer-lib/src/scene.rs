@@ -68,7 +68,7 @@ struct SceneFile {
 #[derive(Deserialize, Debug)]
 struct SceneData {
     camera: Vec<CameraData>,
-    light: Vec<LightType>,
+    light: Vec<LightData>,
     shader: Vec<ShaderData>,
     shape: Vec<ShapeData>,
     #[serde(
@@ -81,6 +81,25 @@ struct SceneData {
 
 #[derive(Deserialize, Debug)]
 struct CameraData {
+    #[serde(rename = "_name")]
+    name: String,
+    #[serde(rename = "imagePlaneWidth", default)]
+    image_plane_width: Option<Real>,
+    #[serde(flatten)]
+    camera_type: CameraType,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "_type")]
+enum CameraType {
+    #[serde(rename = "perspective")]
+    Perspective(PerspectiveCameraData),
+    #[serde(rename = "orthographic")]
+    Orthographic(OrthographicCameraData),
+}
+
+#[derive(Deserialize, Debug)]
+struct PerspectiveCameraData {
     #[serde(deserialize_with = "deserialize_vec3")]
     position: Vec3,
     #[serde(
@@ -97,12 +116,30 @@ struct CameraData {
     lookat_point: Option<Vec3>,
     #[serde(rename = "focalLength")]
     focal_length: Real,
-    #[serde(rename = "imagePlaneWidth", default)]
-    image_plane_width: Option<Real>,
-    #[serde(rename = "_name")]
-    name: String,
-    #[serde(rename = "_type")]
-    camera_type: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct OrthographicCameraData {
+    #[serde(deserialize_with = "deserialize_vec3")]
+    position: Vec3,
+    #[serde(
+        rename = "viewDir",
+        default,
+        deserialize_with = "deserialize_optional_vec3"
+    )]
+    view_dir: Option<Vec3>,
+    #[serde(
+        rename = "lookatPoint",
+        default,
+        deserialize_with = "deserialize_optional_vec3"
+    )]
+    lookat_point: Option<Vec3>,
+}
+
+#[derive(Deserialize, Debug)]
+struct LightData {
+    #[serde(flatten)]
+    light_type: LightType,
 }
 
 #[derive(Deserialize, Debug)]
@@ -250,21 +287,6 @@ pub fn parse_scene(
         )));
     }
 
-    // Check that view_dir or lookat_point is specified
-    if scene.camera[0].view_dir.is_none() && scene.camera[0].lookat_point.is_none() {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "camera must have view_dir or lookat_point specified",
-        )));
-    }
-
-    // View direction or calculate from camera position and lookat point
-    let view_dir = match scene.camera[0].view_dir {
-        Some(v) => v,
-        // calculate view dir from camera position and lookat point
-        None => scene.camera[0].lookat_point.unwrap() - scene.camera[0].position,
-    };
-
     // Image size or default
     let image_width = image_width.unwrap_or(DEFAULT_IMAGE_WIDTH);
     let image_height = image_height.unwrap_or(DEFAULT_IMAGE_HEIGHT);
@@ -273,25 +295,54 @@ pub fn parse_scene(
     let aspect_ratio = aspect_ratio.unwrap_or(image_width as Real / image_height as Real);
 
     // Create camera
-    let mut camera: Box<dyn crate::camera::Camera> = match scene.camera[0].camera_type.as_str() {
-        "perspective" => Box::new(PerspectiveCamera::new(
-            scene.camera[0].position,
-            &view_dir,
-            aspect_ratio,
-            scene.camera[0].focal_length,
-        )),
-        "orthographic" => Box::new(OrthographicCamera::new(
-            scene.camera[0].position,
-            &view_dir,
-            aspect_ratio,
-        )),
+    let mut camera: Box<dyn crate::camera::Camera> = match &scene.camera[0].camera_type {
+        CameraType::Perspective(perspective) => {
+            // View direction or calculate from camera position and lookat point
+            let view_dir = match perspective.view_dir {
+                Some(v) => v,
+                // calculate view dir from camera position and lookat point
+                None => {
+                    perspective
+                        .lookat_point
+                        .ok_or("viewDir or lookatPoint must be specified")?
+                        - perspective.position
+                }
+            };
+
+            Box::new(PerspectiveCamera::new(
+                perspective.position,
+                &view_dir,
+                aspect_ratio,
+                perspective.focal_length,
+            ))
+        }
+        CameraType::Orthographic(orthographic) => {
+            // View direction or calculate from camera position and lookat point
+            let view_dir = match orthographic.view_dir {
+                Some(v) => v,
+                // calculate view dir from camera position and lookat point
+                None => {
+                    orthographic
+                        .lookat_point
+                        .ok_or("viewDir or lookatPoint must be specified")?
+                        - orthographic.position
+                }
+            };
+
+            Box::new(OrthographicCamera::new(
+                orthographic.position,
+                &view_dir,
+                aspect_ratio,
+            ))
+        }
         _ => {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                "camera type not supported",
+                "camera type not supported yet",
             )))
         }
     };
+
     camera.set_image_pixels(image_width, image_height);
 
     // Create shaders
@@ -375,7 +426,7 @@ pub fn parse_scene(
     // Create lights
     let mut lights: Vec<Box<dyn crate::light::Light>> = Vec::new();
     for light in scene.light.iter() {
-        let light: Box<dyn Light> = match light {
+        let light: Box<dyn Light> = match &light.light_type {
             LightType::AmbientLight(ambient_light) => {
                 Box::new(AmbientLight::new(ambient_light.intensity))
             }
