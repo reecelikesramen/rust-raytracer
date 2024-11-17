@@ -1,5 +1,11 @@
 //! Crate prelude
 
+#[cfg(all(feature = "f32", feature = "f64"))]
+compile_error!("Features `f32` and `f64` are mutually exclusive. Enable only one.");
+
+#[cfg(not(any(feature = "f32", feature = "f64")))]
+compile_error!("Feature `f32` or `f64` must be enabled.");
+
 // full precision
 #[cfg(feature = "f64")]
 pub type Real = f64;

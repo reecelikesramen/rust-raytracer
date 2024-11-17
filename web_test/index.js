@@ -76,20 +76,20 @@ async function run() {
   // Initialize the WASM module
   await init()
 
-  const width = 40
-  const height = 30
+  const width = 800
+  const height = 600
 
   const canvas = document.getElementById("canvas")
   canvas.style.width = "800px"
   canvas.style.height = "600px"
 
   // Fetch ./scenes/sphere_scene.json into a string
-  const scene_json = await fetch("./scenes/cornell_room.json").then((r) => r.text())
+  const scene_json = await fetch("./scenes/spheres_1K.json").then((r) => r.text())
 
   const scene_args = {
     width,
     height,
-    rays_per_pixel: 9,
+    rays_per_pixel: 4,
   }
 
   // on key press k clear the canvas to black includign quads and textures and whatnot
