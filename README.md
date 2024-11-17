@@ -1,8 +1,9 @@
-# Raytracer
+# WebTracer: A Rust & WASM Ray tracing Engine
+Currently implementing forward ray tracing
 
 ## Setting up
 
-### Build CLI
+### Build CLI for regular use
 `cargo build -p raytracer-cli --release`
 
 ### Build the WASM binding (in the web-test branch)
@@ -15,13 +16,15 @@ python -m http.server
 Open http://localhost:8000
 
 ## Main Goals
-- [x] Recreate my [raytracer](https://github.com/reecelikesramen/raytracer) project from CS 4212 Computer Graphics in Rust.
+- [x] Learn Rust fundamentals by recreating my [raytracer](https://github.com/reecelikesramen/raytracer) project from CS 4212 Computer Graphics in Rust.
 - [x] Separate the CLI and the core library, enable the library to compile to WASM and invoke from the web browser.
-- [ ] Optimize the raytracer with SIMD and CUDA (separate versions) to increase exposure to low-level parallelization.
+- [ ] Optimize the raytracer by parallelizing math operations to increase exposure to low-level optimization.
 - [ ] Extend the raytracer with more interesting shaders, shapes, and light types.
 
-## Examples
+## Renders
 Note: the following scenes were created by Dr. Pete Willemsen at University of Minnesota Duluth.
+
+CLI args for all renders here: `raytracer-cli --width 1000 --height 1000 --rays-per-pixel 9 --recursion-depth 6`
 
 Simple sphere scene:
 ![3 spheres upon a plane with 3 lights casting shadows](renders/simple_sphere_scene.png)
@@ -37,3 +40,6 @@ Cornell Room:
 
 Cityscape:
 ![Boxy skyscrapers and spheres made to look like trees make a city](renders/box_sphere_test.png)
+
+Stanford bunny:
+![Standard graphics rendering test, 3d model of a bunny](renders/stanford_bunny.png)
