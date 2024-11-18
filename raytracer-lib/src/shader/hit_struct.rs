@@ -1,8 +1,4 @@
-use crate::{
-    math::Ray,
-    prelude::*,
-    scene::{self, Scene},
-};
+use crate::{math::Ray, prelude::*, scene::Scene};
 
 /// <'hit> lifetimes lives as long as a single pixel render takes.
 pub struct Hit<'hit> {

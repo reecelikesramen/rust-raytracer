@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use super::{BBox, Shape, ShapeType};
-use crate::shader::{NullShader, Shader};
+use crate::shader::Shader;
 use crate::{prelude::*, vec3};
-use approx::relative_eq;
 
 #[derive(Debug)]
 pub struct Sphere {

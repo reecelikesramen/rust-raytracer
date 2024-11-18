@@ -5,21 +5,18 @@ use crate::{
     light::{AmbientLight, Light, PointLight},
     prelude::*,
     shader::{
-        BlinnPhongShader, GGXMirrorShader, Hit, LambertianShader, NormalShader,
-        PerfectMirrorShader, Shader,
+        BlinnPhongShader, GGXMirrorShader, LambertianShader, NormalShader, PerfectMirrorShader,
+        Shader,
     },
 };
 use nalgebra::Vector3;
 use serde::{de, Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
-    convert::TryInto,
-    fs::File,
-    io::BufReader,
+    path::Path,
     str::FromStr,
     sync::Arc,
 };
-use tobj::{load_obj, Model};
 
 fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String>
 where
@@ -61,28 +58,6 @@ where
         Some(s) => parse_vec3(&s).map(Some).map_err(de::Error::custom),
         None => Ok(None),
     }
-}
-
-fn deserialize_model_file<'de, D>(deserializer: D) -> Result<Model, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let file_path: String = String::deserialize(deserializer)?;
-
-    let (models, _) =
-        load_obj(&file_path, &tobj::LoadOptions::default()).map_err(de::Error::custom)?;
-
-    if models.len() != 1 {
-        return Err(de::Error::custom(format!(
-            "expected exactly one model, found {}",
-            models.len()
-        )));
-    }
-
-    // take ownership of the model from the Vec
-    let model = models.into_iter().next().unwrap();
-
-    Ok(model)
 }
 
 #[derive(Deserialize, Debug)]
@@ -292,12 +267,13 @@ struct TriangleData {
 
 #[derive(Deserialize, Debug)]
 struct MeshData {
-    #[serde(rename = "file", deserialize_with = "deserialize_model_file")]
-    obj: Model,
+    #[serde(rename = "file")]
+    obj_path: String,
 }
 
 pub fn parse_scene(
     scene_json: &str,
+    scene_data_path: &str,
     image_width: Option<u32>,
     image_height: Option<u32>,
     aspect_ratio: Option<Real>,
@@ -368,12 +344,6 @@ pub fn parse_scene(
                 aspect_ratio,
             ))
         }
-        _ => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "camera type not supported yet",
-            )))
-        }
     };
 
     camera.set_image_pixels(image_width, image_height);
@@ -391,12 +361,9 @@ pub fn parse_scene(
                 blinn_phong.specular,
                 blinn_phong.shininess,
             )),
-            ShaderType::PerfectMirror(mirror) => Arc::new(PerfectMirrorShader::default()),
+            ShaderType::PerfectMirror(_) => Arc::new(PerfectMirrorShader::default()),
             ShaderType::GGXMirror(mirror) => {
                 Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
-            }
-            _ => {
-                unimplemented!("shader type not supported yet")
             }
         };
         shaders.insert(shader_name, shader);
@@ -449,10 +416,14 @@ pub fn parse_scene(
             ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
                 triangle.a, triangle.b, triangle.c, shader, shape_name,
             )),
-            ShapeType::Mesh(mesh) => Arc::new(Mesh::new(&mesh.obj, shader, shape_name)),
-            _ => {
-                unimplemented!("shape type not supported yet")
-            }
+            ShapeType::Mesh(mesh) => Arc::new(Mesh::new(
+                Path::new(&scene_data_path)
+                    .join(&mesh.obj_path)
+                    .to_str()
+                    .unwrap(),
+                shader,
+                shape_name,
+            )),
         };
         shapes.push(shape);
     }
@@ -466,9 +437,6 @@ pub fn parse_scene(
             }
             LightType::PointLight(point_light) => {
                 Box::new(PointLight::new(point_light.position, point_light.intensity))
-            }
-            _ => {
-                unimplemented!("light type not supported yet")
             }
         };
         lights.push(light);

@@ -1,7 +1,5 @@
-#![allow(unused)] // For beginning only
-
 mod output;
-use std::str::FromStr;
+use std::path::Path;
 
 use output::save;
 
@@ -9,7 +7,7 @@ extern crate clap;
 extern crate indicatif;
 extern crate raytracer_lib;
 use clap::{Parser, ValueEnum};
-use raytracer_lib::{parse_scene, public_consts, render, Framebuffer, Scene};
+use raytracer_lib::{parse_scene, public_consts, render};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum AntialiasMethod {
@@ -51,9 +49,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // read scene path as string
     let scene_json = std::fs::read_to_string(&args.scene_path)?;
+    let scene_data_path = Path::new(&args.scene_path)
+        .parent()
+        .unwrap()
+        .to_str()
+        .unwrap();
 
     let scene = parse_scene(
         &scene_json,
+        &scene_data_path,
         args.width,
         args.height,
         args.aspect_ratio,

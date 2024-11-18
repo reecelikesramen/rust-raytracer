@@ -5,8 +5,6 @@ use crate::{prelude::*, shader::Shader, vec3};
 
 #[derive(Debug)]
 pub struct Cuboid {
-    min: Vec3,
-    max: Vec3,
     bbox: BBox,
     shader: Arc<dyn Shader>,
     name: &'static str,
@@ -15,8 +13,6 @@ pub struct Cuboid {
 impl Cuboid {
     pub fn new(min: Vec3, max: Vec3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         Self {
-            min,
-            max,
             bbox: BBox::new(min, max),
             shader,
             name,

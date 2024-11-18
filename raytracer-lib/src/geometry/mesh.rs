@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
-use tobj::Model;
+use tobj::load_obj;
 
 use crate::{prelude::*, shader::Shader, vec3};
 
-use super::{bvh, BBox, Shape, Triangle, BVH};
+use super::{BBox, Shape, Triangle, BVH};
 
 #[derive(Debug)]
 pub struct Mesh {
@@ -15,7 +15,21 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(model: &Model, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(obj_path: &str, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+        let (models, _) = load_obj(obj_path, &tobj::LoadOptions::default())
+            .expect("Failed to load model for mesh");
+
+        if models.len() != 1 {
+            panic!(
+                "expected exactly one model, found {} for mesh {}",
+                models.len(),
+                name
+            );
+        }
+
+        // take ownership of the model from the Vec
+        let model = models.into_iter().next().unwrap();
+
         let positions = model
             .mesh
             .positions

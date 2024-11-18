@@ -1,6 +1,5 @@
 use super::*;
 use crate::math::Ray;
-use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct PerspectiveCamera {
