@@ -17,6 +17,10 @@ pub type Real = f32;
 pub type Color = nalgebra::Vector3<f32>;
 pub type Vec3 = nalgebra::Vector3<Real>;
 
+/// Wrapper for types to implement custom behavior
+#[derive(Debug)]
+pub struct W<T>(pub T);
+
 #[macro_export]
 macro_rules! vec3 {
     ($x:expr, $y:expr, $z:expr) => {
