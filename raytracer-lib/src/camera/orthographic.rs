@@ -1,6 +1,6 @@
 use super::*;
 use crate::math::Ray;
-use crate::{prelude::*, vec3};
+use crate::vec3;
 
 #[derive(Debug)]
 pub struct OrthographicCamera {

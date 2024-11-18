@@ -1,6 +1,4 @@
-use rand::Rng;
-
-use crate::{prelude::*, shader::perfect_mirror};
+use crate::prelude::*;
 
 use super::{Hit, Shader};
 
@@ -9,7 +7,7 @@ pub struct PerfectMirrorShader;
 
 impl Shader for PerfectMirrorShader {
     fn apply(&self, hit: &Hit) -> Color {
-        if (hit.depth >= hit.scene.recursion_depth) {
+        if hit.depth >= hit.scene.recursion_depth {
             return hit.scene.background_color;
         }
 

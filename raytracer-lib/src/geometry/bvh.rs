@@ -1,4 +1,4 @@
-use crate::{geometry::Shape, math::Ray, prelude::*};
+use crate::geometry::Shape;
 use std::sync::Arc;
 
 use super::BBox;

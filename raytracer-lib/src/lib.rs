@@ -1,13 +1,5 @@
-#![allow(unused)]
-
-extern crate approx;
 extern crate nalgebra;
 extern crate serde;
-
-use std::{
-    collections::{hash_map, HashMap},
-    hash::Hash,
-};
 
 use crate::prelude::*;
 

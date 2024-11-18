@@ -31,7 +31,7 @@ macro_rules! color {
     };
 }
 
-pub use constants::*;
+pub(crate) use constants::*;
 pub use public_consts::*;
 
 mod constants {

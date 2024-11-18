@@ -1,4 +1,4 @@
-use crate::{color, prelude::*, shader::perfect_mirror};
+use crate::{color, math::create_coordinate_system, prelude::*};
 use rand::Rng;
 
 use super::{Hit, Shader};
@@ -92,16 +92,4 @@ impl Shader for GGXMirrorShader {
         // Average the samples
         accumulated_color / self.samples as f32
     }
-}
-
-// Helper function to create a coordinate system from a normal
-fn create_coordinate_system(normal: &Vec3) -> (Vec3, Vec3) {
-    let tangent = if normal.x.abs() > 0.99 {
-        Vec3::new(0.0, 1.0, 0.0)
-    } else {
-        Vec3::new(1.0, 0.0, 0.0)
-    };
-    let bitangent = normal.cross(&tangent).normalize();
-    let tangent = bitangent.cross(normal).normalize();
-    (tangent, bitangent)
 }

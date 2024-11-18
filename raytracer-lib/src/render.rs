@@ -1,14 +1,8 @@
-use std::any::Any;
-use std::borrow::BorrowMut;
-
 use crate::antialias::{antialias, AntialiasMethod};
-use crate::geometry::Sphere;
 use crate::scene::Scene;
 use crate::shader::Hit;
 use crate::Framebuffer;
-use crate::{color, prelude::*, scene};
-
-static NOP_CB: fn() -> () = || {};
+use crate::{color, prelude::*};
 
 pub fn render(
     scene: &Scene,
@@ -38,7 +32,6 @@ pub fn render_mut(
 ) {
     let width = scene.image_width;
     let height = scene.image_height;
-    let cb = per_pixel_cb.unwrap_or(&NOP_CB);
 
     for i in 0..width {
         for j in 0..height {
