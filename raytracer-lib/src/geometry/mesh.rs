@@ -15,8 +15,8 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn new(obj_path: &str, shader: Arc<dyn Shader>, name: &'static str) -> Self {
-        let (models, _) = load_obj(obj_path, &tobj::LoadOptions::default())
+    pub fn new(model_path: String, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+        let (models, _) = load_obj(model_path, &tobj::LoadOptions::default())
             .expect("Failed to load model for mesh");
 
         if models.len() != 1 {
