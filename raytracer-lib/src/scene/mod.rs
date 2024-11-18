@@ -6,8 +6,21 @@ use crate::{camera::*, color, geometry::*, light::*, prelude::*, shader::*};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
+    process::exit,
     sync::Arc,
 };
+
+/// TODO:
+/// - Multiple cameras allowed, select with scene_parameters.camera [model done]
+/// - Instanced models [model done]
+/// - Transforms for instanced models [model done]
+/// - Textures [model done]
+/// - Diffuse, specular can be texture or color [model done]
+/// - ParsedScene doesn't need a shaders map
+/// - SceneArgs container for disable_shadows, recursion_depth, image_width, image_height, etc...
+/// - Background structure for either background_color or env_map
+/// - Impl scene stuff so its not just public members
+/// - MTL parsing into shaders
 
 #[derive(Debug)]
 pub struct Scene {
@@ -32,17 +45,21 @@ struct SceneModel {
 struct SceneData {
     #[serde(alias = "camera")]
     cameras: Vec<CameraData>,
-    #[serde(alias = "light")]
+    #[serde(alias = "light", default)]
     lights: Vec<LightData>,
     #[serde(alias = "shader")]
     shaders: Vec<ShaderData>,
     #[serde(alias = "shape")]
     shapes: Vec<ShapeData>,
-    #[serde(alias = "sceneParameters")]
-    scene_parameters: Option<SceneParameters>,
+    #[serde(alias = "texture", default)]
+    textures: Vec<TextureData>,
+    #[serde(alias = "instance", default)]
+    instances: Vec<ShapeData>,
+    #[serde(alias = "sceneParameters", default)]
+    scene_parameters: SceneParameters,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 struct SceneParameters {
     #[serde(flatten)]
     background: Option<Background>,
@@ -116,11 +133,11 @@ enum CameraOrientation {
         view_dir: W<Vec3>,
     },
     LookAtPoint {
-        #[serde(alias = "lookAtPoint")]
+        #[serde(alias = "lookatPoint")]
         lookat_point: W<Vec3>,
     },
     LookAtShape {
-        #[serde(alias = "lookAtShape")]
+        #[serde(alias = "lookatShape")]
         lookat_shape: String,
     },
 }
@@ -133,10 +150,11 @@ struct LightData {
 
 #[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
+#[serde(rename_all = "lowercase")]
 enum LightType {
-    #[serde(alias = "point")]
     Point(PointLightData),
-    #[serde(alias = "ambient")]
+    Area(AreaLightData),
+    Shape(ShapeLightData),
     Ambient(AmbientLightData),
 }
 
@@ -152,6 +170,28 @@ struct AmbientLightData {
 }
 
 #[derive(Deserialize, Debug)]
+struct AreaLightData {
+    position: W<Vec3>,
+    intensity: W<Color>,
+    normal: W<Vec3>,
+    #[serde(flatten)]
+    shape: AreaLightShape,
+}
+
+#[derive(Deserialize, Debug)]
+struct ShapeLightData {
+    intensity: W<Color>,
+    shape: ShapeData,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum AreaLightShape {
+    Rectangular { length: Real, width: Real },
+    Circular { radius: Real },
+}
+
+#[derive(Deserialize, Debug)]
 struct ShaderData {
     #[serde(rename = "_name")]
     name: String,
@@ -162,28 +202,42 @@ struct ShaderData {
 #[derive(Deserialize, Debug)]
 #[serde(tag = "_type")]
 enum ShaderType {
+    Diffuse,
     Lambertian(LambertianShaderData),
     BlinnPhong(BlinnPhongShaderData),
     #[serde(alias = "Mirror")]
-    PerfectMirror(PerfectMirrorShaderData),
+    PerfectMirror,
     GGXMirror(GGXMirrorShaderData),
+    #[serde(alias = "BlinnPhongMirrored")]
+    BlinnPhongMirror,
+    Glaze,
+    Dielectric,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum MaterialProperty {
+    Color(W<Color>),
+    Texture {
+        #[serde(alias = "tex")]
+        texture: String,
+        #[serde(alias = "data")]
+        tint: W<Color>,
+    },
 }
 
 #[derive(Deserialize, Debug)]
 struct LambertianShaderData {
-    diffuse: W<Color>,
+    diffuse: MaterialProperty,
 }
 
 #[derive(Deserialize, Debug)]
 struct BlinnPhongShaderData {
-    diffuse: W<Color>,
-    specular: W<Color>,
+    diffuse: MaterialProperty,
+    specular: MaterialProperty,
     #[serde(alias = "phongExp")]
     shininess: f32,
 }
-
-#[derive(Deserialize, Debug)]
-struct PerfectMirrorShaderData {}
 
 #[derive(Deserialize, Debug)]
 struct GGXMirrorShaderData {
@@ -214,6 +268,7 @@ enum ShapeType {
     Box(BoxData),
     Triangle(TriangleData),
     Mesh(MeshData),
+    Instance(InstanceData),
 }
 
 #[derive(Deserialize, Debug)]
@@ -253,6 +308,50 @@ struct MeshData {
     model_path: String,
 }
 
+#[derive(Deserialize, Debug)]
+struct InstanceData {
+    #[serde(alias = "_id")]
+    instance_of: String,
+    #[serde(alias = "xform")]
+    transform: Vec<TransformData>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
+#[serde(rename_all = "lowercase")]
+enum TransformData {
+    Translate {
+        amount: W<Vec3>,
+    },
+    Scale {
+        amount: W<Vec3>,
+    },
+    #[serde(alias = "rotation")]
+    Rotate {
+        axis: RotationAxis,
+        #[serde(alias = "amount")]
+        degrees: Real,
+    },
+}
+
+#[derive(Deserialize, Debug)]
+enum RotationAxis {
+    #[serde(alias = "x")]
+    X,
+    #[serde(alias = "y")]
+    Y,
+    #[serde(alias = "z")]
+    Z,
+}
+
+#[derive(Deserialize, Debug)]
+struct TextureData {
+    #[serde(alias = "sourcefile")]
+    image_path: String,
+    #[serde(alias = "_name")]
+    name: String,
+}
+
 pub fn parse_scene(
     scene_json: &str,
     scene_data_path: &str,
@@ -269,6 +368,8 @@ pub fn parse_scene(
     // print scene data
     #[cfg(debug_assertions)]
     println!("{:#?}", scene);
+
+    exit(0);
 
     // Check that there is exactly one camera
     if scene.cameras.len() != 1 {
@@ -334,17 +435,33 @@ pub fn parse_scene(
         let shader_name = shader.name.clone();
         let shader: Arc<dyn Shader> = match &shader.shader {
             ShaderType::Lambertian(lambertian) => {
-                Arc::new(LambertianShader::new(lambertian.diffuse.0))
+                let diffuse = match &lambertian.diffuse {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+                Arc::new(LambertianShader::new(diffuse))
             }
-            ShaderType::BlinnPhong(blinn_phong) => Arc::new(BlinnPhongShader::new(
-                blinn_phong.diffuse.0,
-                blinn_phong.specular.0,
-                blinn_phong.shininess,
-            )),
-            ShaderType::PerfectMirror(_) => Arc::new(PerfectMirrorShader::default()),
+            ShaderType::BlinnPhong(blinn_phong) => {
+                let diffuse = match &blinn_phong.diffuse {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+                let specular = match &blinn_phong.specular {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+
+                Arc::new(BlinnPhongShader::new(
+                    diffuse,
+                    specular,
+                    blinn_phong.shininess,
+                ))
+            }
+            ShaderType::PerfectMirror => Arc::new(PerfectMirrorShader::default()),
             ShaderType::GGXMirror(mirror) => {
                 Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
             }
+            _ => unimplemented!("shader type not implemented yet"),
         };
         shaders.insert(shader_name, shader);
     }
@@ -416,6 +533,7 @@ pub fn parse_scene(
                 );
                 Arc::new(Mesh::new(model_path, shader, shape_name))
             }
+            _ => unimplemented!(),
         };
         shapes.push(shape);
     }
@@ -431,6 +549,7 @@ pub fn parse_scene(
                 point_light.position.0,
                 point_light.intensity.0,
             )),
+            _ => unimplemented!("light type not implemented yet"),
         };
         lights.push(light);
     }
