@@ -1,7 +1,7 @@
 use crate::{
     camera::{OrthographicCamera, PerspectiveCamera},
     color,
-    geometry::{Cuboid, Shape, Sphere, Triangle, BVH},
+    geometry::{Cuboid, Mesh, Shape, Sphere, Triangle, BVH},
     light::{AmbientLight, Light, PointLight},
     prelude::*,
     shader::{
@@ -14,9 +14,12 @@ use serde::{de, Deserialize, Deserializer};
 use std::{
     collections::{HashMap, HashSet},
     convert::TryInto,
+    fs::File,
+    io::BufReader,
     str::FromStr,
     sync::Arc,
 };
+use tobj::{load_obj, Model};
 
 fn parse_vec3<FloatType>(s: &str) -> Result<Vector3<FloatType>, String>
 where
@@ -58,6 +61,28 @@ where
         Some(s) => parse_vec3(&s).map(Some).map_err(de::Error::custom),
         None => Ok(None),
     }
+}
+
+fn deserialize_model_file<'de, D>(deserializer: D) -> Result<Model, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let file_path: String = String::deserialize(deserializer)?;
+
+    let (models, _) =
+        load_obj(&file_path, &tobj::LoadOptions::default()).map_err(de::Error::custom)?;
+
+    if models.len() != 1 {
+        return Err(de::Error::custom(format!(
+            "expected exactly one model, found {}",
+            models.len()
+        )));
+    }
+
+    // take ownership of the model from the Vec
+    let model = models.into_iter().next().unwrap();
+
+    Ok(model)
 }
 
 #[derive(Deserialize, Debug)]
@@ -236,6 +261,8 @@ enum ShapeType {
     Box(BoxData),
     #[serde(rename = "triangle")]
     Triangle(TriangleData),
+    #[serde(rename = "mesh")]
+    Mesh(MeshData),
 }
 
 #[derive(Deserialize, Debug)]
@@ -261,6 +288,12 @@ struct TriangleData {
     b: Vec3,
     #[serde(rename = "v2", deserialize_with = "deserialize_vec3")]
     c: Vec3,
+}
+
+#[derive(Deserialize, Debug)]
+struct MeshData {
+    #[serde(rename = "file", deserialize_with = "deserialize_model_file")]
+    obj: Model,
 }
 
 pub fn parse_scene(
@@ -416,6 +449,7 @@ pub fn parse_scene(
             ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
                 triangle.a, triangle.b, triangle.c, shader, shape_name,
             )),
+            ShapeType::Mesh(mesh) => Arc::new(Mesh::new(&mesh.obj, shader, shape_name)),
             _ => {
                 unimplemented!("shape type not supported yet")
             }

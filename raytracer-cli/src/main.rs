@@ -62,8 +62,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.render_normals,
     )?;
 
-    #[cfg(debug_assertions)]
-    println!("{:#?}", scene);
+    // #[cfg(debug_assertions)]
+    // println!("{:#?}", scene);
 
     let rays_per_pixel = args
         .rays_per_pixel
