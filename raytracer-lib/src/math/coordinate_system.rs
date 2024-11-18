@@ -11,7 +11,25 @@ pub struct CoordinateSystem {
 impl CoordinateSystem {
     pub fn new(position: Vec3, view_direction: &Vec3) -> Self {
         let w = -view_direction.normalize();
-        let (u, v) = create_coordinate_system(&w);
+        let mut temp_up = vec3!(0.0, 1.0, 0.0);
+        let tdotw = temp_up.dot(&w);
+        if tdotw.abs() > 0.999 {
+            temp_up = w.clone();
+            let x = temp_up.x.abs();
+            let y = temp_up.y.abs();
+            let z = temp_up.z.abs();
+            if x <= y && x <= z {
+                temp_up.x = 1.0;
+            } else if y <= x {
+                temp_up.y = 1.0;
+            } else {
+                temp_up.z = 1.0;
+            }
+        }
+        let u = temp_up.cross(&w);
+        let v = w.cross(&u);
+
+        // let (u, v) = create_coordinate_system(&w);
         Self {
             u: u.normalize(),
             v: v.normalize(),
