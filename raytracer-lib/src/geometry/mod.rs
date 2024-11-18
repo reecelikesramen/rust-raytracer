@@ -1,16 +1,18 @@
 use crate::prelude::*;
 
 mod bbox;
+mod bvh;
 mod cuboid;
+mod mesh;
 mod sphere;
 mod triangle;
-mod bvh;
 
 pub use self::bbox::BBox;
+pub use self::bvh::BVH;
 pub use self::cuboid::Cuboid;
+pub use self::mesh::Mesh;
 pub use self::sphere::Sphere;
 pub use self::triangle::Triangle;
-pub use self::bvh::{BVH, BVHNode};
 
 pub enum ShapeType {
     Sphere,

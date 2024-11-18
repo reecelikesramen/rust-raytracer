@@ -140,6 +140,10 @@ impl BVH {
     pub fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
         self.root.closest_hit(hit)
     }
+
+    pub fn get_bbox(&self) -> &BBox {
+        &self.root.bbox
+    }
 }
 
 // #[cfg(test)]
