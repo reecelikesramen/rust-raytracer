@@ -46,6 +46,7 @@ mod constants {
     pub(crate) static ERROR_COLOR: Color = color!(1.0, 0.0, 1.0);
     pub(crate) static DEFAULT_BACKGROUND_COLOR: Color = color!(0.198, 0.198, 0.198);
     pub(crate) static VERY_SMALL_NUMBER: Real = 1e-6;
+    pub(crate) static DEFAULT_CAMERA: &str = "main";
 
     #[cfg(feature = "f64")]
     pub(crate) static PI: Real = std::f64::consts::PI;
