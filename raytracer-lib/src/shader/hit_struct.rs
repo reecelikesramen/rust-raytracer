@@ -29,7 +29,7 @@ impl<'hit> Hit<'hit> {
     pub fn to_light(to_light: Ray, scene: &'hit Scene) -> Self {
         Self {
             t: 1.0,
-            t_min: 0.01,
+            t_min: VERY_SMALL_NUMBER,
             depth: 0,
             ray: to_light,
             normal: Unit::new_unchecked(V3::default()),

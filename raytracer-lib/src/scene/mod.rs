@@ -625,27 +625,38 @@ pub fn parse_scene(
                     .clone();
                 let mut translate = V3::default();
                 let mut scale = V3::new(1.0, 1.0, 1.0);
-                let mut rotate = Rotation3::identity();
+                let mut rotate = (
+                    Rotation3::identity(),
+                    Rotation3::identity(),
+                    Rotation3::identity(),
+                );
                 for transformation in instance.transform.iter() {
                     match transformation {
                         TransformData::Translate { amount } => translate += amount.0,
                         TransformData::Scale { amount } => scale.component_mul_assign(&amount.0),
                         TransformData::Rotate { axis, degrees } => {
                             let angle = PI * degrees / 180.0;
-                            let axis = match axis {
-                                RotationAxis::X => V3::x_axis(),
-                                RotationAxis::Y => V3::y_axis(),
-                                RotationAxis::Z => V3::z_axis(),
+                            match axis {
+                                RotationAxis::X => {
+                                    rotate.0 = Rotation3::from_axis_angle(&V3::x_axis(), angle)
+                                }
+                                RotationAxis::Y => {
+                                    rotate.1 = Rotation3::from_axis_angle(&V3::y_axis(), angle)
+                                }
+                                RotationAxis::Z => {
+                                    rotate.2 = Rotation3::from_axis_angle(&V3::z_axis(), angle)
+                                }
                             };
-                            rotate *= Rotation3::from_axis_angle(&axis, angle)
                         }
                     }
                 }
 
+                let rotation = rotate.2 * rotate.1 * rotate.0;
+
                 Arc::new(Instance::new(
                     shape,
                     Translation3::from(translate),
-                    rotate,
+                    rotation,
                     Scale3::from(scale),
                     shader,
                     shape_name,
