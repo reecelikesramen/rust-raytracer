@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
+use na::Unit;
+
 use super::{BBox, Shape, ShapeType};
 use crate::shader::Shader;
-use crate::{prelude::*, vec3};
+use crate::{prelude::*, V3};
 
 #[derive(Debug)]
 pub struct Sphere {
-    center: Vec3,
+    center: P3,
     radius: Real,
     bbox: BBox,
     shader: Arc<dyn Shader>,
@@ -14,21 +16,21 @@ pub struct Sphere {
 }
 
 impl Sphere {
-    pub fn new(center: Vec3, radius: Real, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(center: P3, radius: Real, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         Self {
             center,
             radius,
             bbox: BBox::new(
-                center - vec3!(radius, radius, radius),
-                center + vec3!(radius, radius, radius),
+                center - V3::new(radius, radius, radius),
+                center + V3::new(radius, radius, radius),
             ),
             shader,
             name,
         }
     }
 
-    pub fn normal(&self, point: &Vec3) -> Vec3 {
-        (point - self.center).normalize()
+    pub fn normal(&self, point: &P3) -> V3 {
+        point - self.center
     }
 }
 
@@ -45,7 +47,7 @@ impl Shape for Sphere {
         &self.bbox
     }
 
-    fn get_centroid(&self) -> Vec3 {
+    fn get_centroid(&self) -> P3 {
         self.center
     }
 
@@ -81,7 +83,7 @@ impl Shape for Sphere {
             return false;
         }
 
-        hit.normal = self.normal(&hit.hit_point());
+        hit.normal = Unit::new_normalize(self.normal(&hit.hit_point()));
         hit.shape = Some(self);
         true
     }

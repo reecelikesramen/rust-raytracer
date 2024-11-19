@@ -31,12 +31,13 @@ impl Shader for BlinnPhongShader {
                     .illuminates(hit)
                     .map(|surface_to_light| (light.as_ref(), surface_to_light))
             })
-            .collect::<Vec<(&dyn Light, Vec3)>>()
+            .collect::<Vec<(&dyn Light, V3)>>()
         {
             let stol_normal = surface_to_light.normalize();
             let cos_incidence = hit.normal.dot(&stol_normal);
 
-            color += self.diffuse.component_mul(&light.get_intensity()) * cos_incidence.max(0.0) as f32;
+            color +=
+                self.diffuse.component_mul(&light.get_intensity()) * cos_incidence.max(0.0) as f32;
 
             let half_vector = ((-hit.ray.direction.normalize()) + stol_normal).normalize();
             color += self.specular.component_mul(&light.get_intensity())

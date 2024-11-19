@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tobj::load_obj;
 
-use crate::{prelude::*, shader::Shader, vec3};
+use crate::{prelude::*, shader::Shader};
 
 use super::{BBox, Shape, Triangle, BVH};
 
@@ -16,8 +16,8 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn new(model_path: String, shader: Arc<dyn Shader>, name: &'static str) -> Self {
-        let (models, _) = load_obj(model_path, &tobj::LoadOptions::default())
-            .expect("Failed to load model for mesh");
+        let (models, _) =
+            load_obj(model_path, &Default::default()).expect("Failed to load model for mesh");
 
         if models.len() != 1 {
             panic!(
@@ -34,8 +34,8 @@ impl Mesh {
             .mesh
             .positions
             .chunks(3)
-            .map(|p| vec3!(p[0] as f64, p[1] as f64, p[2] as f64))
-            .collect::<Vec<Vec3>>();
+            .map(|p| P3::new(p[0] as f64, p[1] as f64, p[2] as f64))
+            .collect::<Vec<P3>>();
         let triangles = model
             .mesh
             .indices
@@ -74,7 +74,7 @@ impl Shape for Mesh {
         &self.bbox
     }
 
-    fn get_centroid(&self) -> Vec3 {
+    fn get_centroid(&self) -> P3 {
         self.bbox.centroid
     }
 

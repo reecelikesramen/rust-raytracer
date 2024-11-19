@@ -14,19 +14,13 @@ pub type Real = f64;
 #[cfg(feature = "f32")]
 pub type Real = f32;
 
-pub type Color = nalgebra::Vector3<f32>;
-pub type Vec3 = nalgebra::Vector3<Real>;
+pub type Color = na::Vector3<f32>;
+pub type V3 = na::Vector3<Real>;
+pub type P3 = na::Point3<Real>;
 
 /// Wrapper for types to implement custom behavior
 #[derive(Debug)]
 pub struct W<T>(pub T);
-
-#[macro_export]
-macro_rules! vec3 {
-    ($x:expr, $y:expr, $z:expr) => {
-        Vec3::new($x, $y, $z)
-    };
-}
 
 #[macro_export]
 macro_rules! color {

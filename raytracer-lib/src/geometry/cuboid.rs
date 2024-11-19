@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use na::Unit;
+
 use super::{BBox, Shape};
-use crate::{prelude::*, shader::Shader, vec3};
+use crate::{prelude::*, shader::Shader, V3};
 
 #[derive(Debug)]
 pub struct Cuboid {
@@ -11,7 +13,7 @@ pub struct Cuboid {
 }
 
 impl Cuboid {
-    pub fn new(min: Vec3, max: Vec3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(min: P3, max: P3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         Self {
             bbox: BBox::new(min, max),
             shader,
@@ -19,7 +21,7 @@ impl Cuboid {
         }
     }
 
-    fn normal(&self, hit_point: &Vec3) -> Vec3 {
+    fn normal(&self, hit_point: &P3) -> V3 {
         let point_to_center = hit_point - self.bbox.centroid;
         let norm_dist_along_axes = point_to_center.component_div(&self.bbox.extent).abs();
 
@@ -28,11 +30,11 @@ impl Cuboid {
         let dz = norm_dist_along_axes.z;
 
         if dx > dy && dx > dz {
-            vec3!(if point_to_center.x > 0.0 { 1.0 } else { -1.0 }, 0.0, 0.0)
+            V3::new(if point_to_center.x > 0.0 { 1.0 } else { -1.0 }, 0.0, 0.0)
         } else if dy > dz {
-            vec3!(0.0, if point_to_center.y > 0.0 { 1.0 } else { -1.0 }, 0.0)
+            V3::new(0.0, if point_to_center.y > 0.0 { 1.0 } else { -1.0 }, 0.0)
         } else {
-            vec3!(0.0, 0.0, if point_to_center.z > 0.0 { 1.0 } else { -1.0 })
+            V3::new(0.0, 0.0, if point_to_center.z > 0.0 { 1.0 } else { -1.0 })
         }
     }
 }
@@ -50,7 +52,7 @@ impl Shape for Cuboid {
         &self.bbox
     }
 
-    fn get_centroid(&self) -> Vec3 {
+    fn get_centroid(&self) -> P3 {
         self.bbox.centroid
     }
 
@@ -61,7 +63,7 @@ impl Shape for Cuboid {
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
         if let Some(t) = self.bbox.hit(&hit.ray, hit.t_min, hit.t) {
             hit.t = t;
-            hit.normal = self.normal(&hit.hit_point());
+            hit.normal = Unit::new_normalize(self.normal(&hit.hit_point()));
             hit.shape = Some(self);
 
             return true;

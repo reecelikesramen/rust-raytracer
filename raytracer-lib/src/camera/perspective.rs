@@ -8,12 +8,7 @@ pub struct PerspectiveCamera {
 }
 
 impl PerspectiveCamera {
-    pub fn new(
-        position: Vec3,
-        view_direction: &Vec3,
-        aspect_ratio: Real,
-        focal_length: Real,
-    ) -> Self {
+    pub fn new(position: P3, view_direction: &V3, aspect_ratio: Real, focal_length: Real) -> Self {
         Self {
             base: CameraBase::new(position, view_direction, aspect_ratio),
             focal_length,

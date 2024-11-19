@@ -25,7 +25,7 @@ impl Shader for LambertianShader {
                     .illuminates(hit)
                     .map(|surface_to_light| (light.as_ref(), surface_to_light))
             })
-            .collect::<Vec<(&dyn Light, Vec3)>>()
+            .collect::<Vec<(&dyn Light, V3)>>()
         {
             let cos_incidence = hit.normal.dot(&surface_to_light.normalize());
 

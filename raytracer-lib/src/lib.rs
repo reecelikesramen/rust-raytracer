@@ -1,4 +1,4 @@
-extern crate nalgebra;
+extern crate nalgebra as na;
 extern crate serde;
 
 use crate::prelude::*;
