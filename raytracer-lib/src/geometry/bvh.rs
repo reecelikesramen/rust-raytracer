@@ -157,13 +157,13 @@ impl BVH {
 //         let shader = Arc::new(NormalShader::new());
 //         let shapes: Vec<Arc<dyn Shape>> = vec![
 //             Arc::new(Sphere::new(
-//                 vec3!(0.0, 0.0, -5.0),
+//                 V3::new(0.0, 0.0, -5.0),
 //                 1.0,
 //                 shader.clone(),
 //                 "sphere1",
 //             )),
 //             Arc::new(Sphere::new(
-//                 vec3!(2.0, 0.0, -5.0),
+//                 V3::new(2.0, 0.0, -5.0),
 //                 1.0,
 //                 shader.clone(),
 //                 "sphere2",
@@ -173,8 +173,8 @@ impl BVH {
 //         let bvh = BVH::new(shapes);
 //         assert!(bvh.root.bbox.hit(
 //             &Ray {
-//                 origin: vec3!(0.0, 0.0, 0.0),
-//                 direction: vec3!(0.0, 0.0, -1.0),
+//                 origin: V3::new(0.0, 0.0, 0.0),
+//                 direction: V3::new(0.0, 0.0, -1.0),
 //             },
 //             0.0,
 //             f64::INFINITY,

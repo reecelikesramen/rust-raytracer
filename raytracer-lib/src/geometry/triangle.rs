@@ -1,32 +1,34 @@
 use std::sync::Arc;
 
-use crate::{prelude::*, shader::Shader, vec3};
+use na::Unit;
+
+use crate::{prelude::*, shader::Shader, V3};
 
 use super::{bbox::BBox, Shape};
 
 #[derive(Debug)]
 pub struct Triangle {
-    a: Vec3,
-    b: Vec3,
-    c: Vec3,
-    normal: Vec3,
+    a: P3,
+    b: P3,
+    c: P3,
+    normal: V3,
     bbox: BBox,
     shader: Arc<dyn Shader>,
     name: &'static str,
 }
 
 impl Triangle {
-    pub fn new(a: Vec3, b: Vec3, c: Vec3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(a: P3, b: P3, c: P3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
         let normal = (b - a).cross(&(c - a)).normalize();
-        let min = vec3!(
+        let min = P3::new(
             a.x.min(b.x).min(c.x),
             a.y.min(b.y).min(c.y),
-            a.z.min(b.z).min(c.z)
+            a.z.min(b.z).min(c.z),
         );
-        let max = vec3!(
+        let max = P3::new(
             a.x.max(b.x).max(c.x),
             a.y.max(b.y).max(c.y),
-            a.z.max(b.z).max(c.z)
+            a.z.max(b.z).max(c.z),
         );
         Self {
             a,
@@ -53,8 +55,8 @@ impl Shape for Triangle {
         &self.bbox
     }
 
-    fn get_centroid(&self) -> Vec3 {
-        self.bbox.centroid
+    fn get_centroid(&self) -> P3 {
+        P3::from((self.a.coords + self.b.coords + self.c.coords) / 3.0)
     }
 
     fn get_shader(&self) -> Arc<dyn Shader> {
@@ -62,7 +64,7 @@ impl Shape for Triangle {
     }
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
-        use nalgebra::Matrix3;
+        use na::Matrix3;
 
         // Create the matrices for Cramer's rule
         let ab = self.a - self.b;
@@ -109,7 +111,7 @@ impl Shape for Triangle {
 
         // We have a valid hit, update the hit record
         hit.t = intersect_t;
-        hit.normal = self.normal;
+        hit.normal = Unit::new_unchecked(self.normal);
         hit.shape = Some(self);
 
         true

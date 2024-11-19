@@ -149,7 +149,7 @@ impl RayTracer {
             in vec2 texCoord;
             out vec4 fragColor;
             void main() {
-                vec3 color = texture(tex, texCoord).rgb;
+                V3 color = texture(tex, texCoord).rgb;
                 fragColor = vec4(color, 1.0);
             }
             "#,

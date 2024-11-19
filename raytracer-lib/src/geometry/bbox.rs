@@ -1,34 +1,75 @@
-use crate::{math::Ray, prelude::*, vec3};
+use na::Matrix4;
+
+use crate::{math::Ray, prelude::*, V3};
 
 #[derive(Debug, Clone)]
 pub struct BBox {
-    min: Vec3,
-    max: Vec3,
-    pub centroid: Vec3,
-    pub extent: Vec3,
+    pub min: P3,
+    pub max: P3,
+    pub centroid: P3,
+    pub extent: V3,
 }
 
 impl BBox {
-    pub fn new(min: Vec3, max: Vec3) -> BBox {
+    pub fn new(min: P3, max: P3) -> BBox {
         BBox {
             min,
             max,
-            centroid: (max + min) / 2.0,
+            centroid: na::center(&min, &max),
             extent: max - min,
         }
     }
 
     pub fn combine(b1: &BBox, b2: &BBox) -> BBox {
-        let min = vec3!(
-            b1.min.x.min(b2.min.x),
-            b1.min.y.min(b2.min.y),
-            b1.min.z.min(b2.min.z)
-        );
-        let max = vec3!(
-            b1.max.x.max(b2.max.x),
-            b1.max.y.max(b2.max.y),
-            b1.max.z.max(b2.max.z)
-        );
+        BBox::new(
+            P3::new(
+                b1.min.x.min(b2.min.x),
+                b1.min.y.min(b2.min.y),
+                b1.min.z.min(b2.min.z),
+            ),
+            P3::new(
+                b1.max.x.max(b2.max.x),
+                b1.max.y.max(b2.max.y),
+                b1.max.z.max(b2.max.z),
+            ),
+        )
+    }
+
+    pub fn transform(&self, transform: &Matrix4<Real>) -> BBox {
+        // Apply the transformation to the 8 corners of the AABB
+        let corners = [
+            self.min,
+            P3::new(self.max.x, self.min.y, self.min.z),
+            P3::new(self.min.x, self.max.y, self.min.z),
+            P3::new(self.max.x, self.max.y, self.min.z),
+            P3::new(self.min.x, self.min.y, self.max.z),
+            P3::new(self.max.x, self.min.y, self.max.z),
+            P3::new(self.min.x, self.max.y, self.max.z),
+            self.max,
+        ];
+
+        // Transform all corners
+        let mut transformed_corners = Vec::new();
+        for corner in corners.iter() {
+            // Apply the homogeneous transformation (multiply matrix by point)
+            let transformed = transform.transform_point(corner);
+            transformed_corners.push(transformed.xyz());
+        }
+
+        // Calculate the new AABB's min and max
+        let mut min = transformed_corners[0];
+        let mut max = transformed_corners[0];
+
+        for corner in transformed_corners.iter() {
+            min.x = min.x.min(corner.x);
+            min.y = min.y.min(corner.y);
+            min.z = min.z.min(corner.z);
+
+            max.x = max.x.max(corner.x);
+            max.y = max.y.max(corner.y);
+            max.z = max.z.max(corner.z);
+        }
+
         BBox::new(min, max)
     }
 
@@ -91,35 +132,35 @@ mod tests {
     #[test]
     fn test_bbox_ray_intersections() {
         // Create a default BBox
-        let b1 = BBox::new(vec3!(-0.25, -0.25, -2.25), vec3!(0.25, 0.25, -1.75));
+        let b1 = BBox::new(P3::new(-0.25, -0.25, -2.25), P3::new(0.25, 0.25, -1.75));
 
         // Create test rays equivalent to C++ test
         let r1 = Ray {
-            origin: vec3!(0.0, 0.0, 0.0),
-            direction: vec3!(0.0, 0.0, -1.0),
+            origin: P3::new(0.0, 0.0, 0.0),
+            direction: V3::new(0.0, 0.0, -1.0),
         };
 
         let r2 = Ray {
-            origin: vec3!(0.0, 0.0, 0.0),
-            direction: vec3!(0.0, 0.0, 1.0),
+            origin: P3::new(0.0, 0.0, 0.0),
+            direction: V3::new(0.0, 0.0, 1.0),
         };
 
         let r3 = Ray {
-            origin: vec3!(1.25, 1.25, 0.25),
-            direction: vec3!(-1.0, -1.0, -2.0),
+            origin: P3::new(1.25, 1.25, 0.25),
+            direction: V3::new(-1.0, -1.0, -2.0),
         };
 
         let r4 = Ray {
-            origin: vec3!(0.0, 0.0, 0.0),
-            direction: vec3!(-2.0, -2.0, -1.0),
+            origin: P3::new(0.0, 0.0, 0.0),
+            direction: V3::new(-2.0, -2.0, -1.0),
         };
 
         // Create larger bounding box for r5 test
-        let b2 = BBox::new(vec3!(-10.0, -300.0, -8.0), vec3!(302.0, 300.0, 600.0));
+        let b2 = BBox::new(P3::new(-10.0, -300.0, -8.0), P3::new(302.0, 300.0, 600.0));
 
         let r5 = Ray {
-            origin: vec3!(80.0, -100.0, 300.0),
-            direction: vec3!(0.1871, 0.6359, -0.7488),
+            origin: P3::new(80.0, -100.0, 300.0),
+            direction: V3::new(0.1871, 0.6359, -0.7488),
         };
 
         // Test ray intersections

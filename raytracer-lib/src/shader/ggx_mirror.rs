@@ -26,7 +26,7 @@ impl GGXMirrorShader {
     }
 
     // Generate a microfacet normal using GGX distribution
-    fn sample_ggx(&self, normal: &Vec3, rng: &mut impl Rng) -> Vec3 {
+    fn sample_ggx(&self, normal: &V3, rng: &mut impl Rng) -> V3 {
         let alpha = self.roughness;
 
         // Sample uniformly on unit square [0,1]^2

@@ -43,3 +43,15 @@ Cityscape:
 
 Stanford bunny:
 ![Standard graphics rendering test, 3d model of a bunny](renders/stanford_bunny.png)
+
+## TODO
+ - Instanced models [model done]
+ - Transforms for instanced models [model done]
+ - Textures [model done]
+ - Diffuse, specular can be texture or color [model done]
+ - ParsedScene doesn't need a shaders map
+ - SceneArgs container for disable_shadows, recursion_depth, image_width, image_height, etc...
+ - Background structure for either background_color or env_map
+ - Impl scene stuff so its not just public members
+ - MTL parsing into shaders
+ - Vectors that must be normalized can be wrapped in na::Unit

@@ -1,17 +1,17 @@
-use crate::{prelude::*, vec3};
+use crate::{prelude::*, V3};
 
 #[derive(Debug)]
 pub struct CoordinateSystem {
-    pub u: Vec3,
-    pub v: Vec3,
-    pub w: Vec3,
-    pub position: Vec3,
+    pub u: V3,
+    pub v: V3,
+    pub w: V3,
+    pub position: P3,
 }
 
 impl CoordinateSystem {
-    pub fn new(position: Vec3, view_direction: &Vec3) -> Self {
+    pub fn new(position: P3, view_direction: &V3) -> Self {
         let w = -view_direction.normalize();
-        let mut temp_up = vec3!(0.0, 1.0, 0.0);
+        let mut temp_up = V3::new(0.0, 1.0, 0.0);
         let tdotw = temp_up.dot(&w);
         if tdotw.abs() > 0.999 {
             temp_up = w.clone();
@@ -38,23 +38,23 @@ impl CoordinateSystem {
         }
     }
 
-    fn to_local(&self, global: Vec3) -> Vec3 {
+    fn to_local(&self, global: P3) -> P3 {
         let temp = global - self.position;
 
-        vec3!(self.u.dot(&temp), self.v.dot(&temp), self.w.dot(&temp))
+        P3::new(self.u.dot(&temp), self.v.dot(&temp), self.w.dot(&temp))
     }
 
-    fn to_global(&self, local: Vec3) -> Vec3 {
-        vec3!(self.u.dot(&local), self.v.dot(&local), self.w.dot(&local)) + self.position
+    fn to_global(&self, local: V3) -> P3 {
+        self.position + V3::new(self.u.dot(&local), self.v.dot(&local), self.w.dot(&local))
     }
 }
 
 // Helper function to create a coordinate system from a normal
-pub fn create_coordinate_system(normal: &Vec3) -> (Vec3, Vec3) {
+pub fn create_coordinate_system(normal: &V3) -> (V3, V3) {
     let tangent = if normal.x.abs() > 0.99 {
-        Vec3::new(0.0, 1.0, 0.0)
+        V3::new(0.0, 1.0, 0.0)
     } else {
-        Vec3::new(1.0, 0.0, 0.0)
+        V3::new(1.0, 0.0, 0.0)
     };
     let bitangent = normal.cross(&tangent).normalize();
     let tangent = bitangent.cross(normal).normalize();

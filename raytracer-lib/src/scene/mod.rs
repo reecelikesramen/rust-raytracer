@@ -1,24 +1,14 @@
 mod parse_vec3;
 
+use na::{Rotation3, Scale3, Translation3};
 use serde::{Deserialize, Serialize};
 
-use crate::{camera::*, color, geometry::*, light::*, prelude::*, shader::*};
+use crate::{camera::*, color, geometry::*, light::*, prelude::*, shader::*, V3};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
     sync::Arc,
 };
-
-/// TODO:
-/// - Instanced models [model done]
-/// - Transforms for instanced models [model done]
-/// - Textures [model done]
-/// - Diffuse, specular can be texture or color [model done]
-/// - ParsedScene doesn't need a shaders map
-/// - SceneArgs container for disable_shadows, recursion_depth, image_width, image_height, etc...
-/// - Background structure for either background_color or env_map
-/// - Impl scene stuff so its not just public members
-/// - MTL parsing into shaders
 
 #[derive(Debug)]
 pub struct Scene {
@@ -109,7 +99,7 @@ enum CameraType {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct PerspectiveCameraData {
-    position: W<Vec3>,
+    position: W<V3>,
     #[serde(flatten)]
     orientation: CameraOrientation,
     #[serde(alias = "focalLength")]
@@ -118,7 +108,7 @@ struct PerspectiveCameraData {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct OrthographicCameraData {
-    position: W<Vec3>,
+    position: W<V3>,
     #[serde(flatten)]
     orientation: CameraOrientation,
 }
@@ -128,19 +118,19 @@ struct OrthographicCameraData {
 enum CameraOrientation {
     ViewDir {
         #[serde(alias = "viewDir")]
-        view_dir: W<Vec3>,
+        view_dir: W<V3>,
     },
     LookAtPoint {
         #[serde(alias = "lookatPoint")]
-        lookat_point: W<Vec3>,
+        lookat_point: W<V3>,
     },
 }
 
 impl CameraOrientation {
-    pub fn get_view_direction(&self, position: Vec3) -> Vec3 {
+    pub fn get_view_direction(&self, position: P3) -> V3 {
         match self {
             CameraOrientation::ViewDir { view_dir } => view_dir.0,
-            CameraOrientation::LookAtPoint { lookat_point } => lookat_point.0 - position,
+            CameraOrientation::LookAtPoint { lookat_point } => P3::from(lookat_point.0) - position,
         }
     }
 }
@@ -163,7 +153,7 @@ enum LightType {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct PointLightData {
-    position: W<Vec3>,
+    position: W<V3>,
     intensity: W<Color>,
 }
 
@@ -174,9 +164,9 @@ struct AmbientLightData {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct AreaLightData {
-    position: W<Vec3>,
+    position: W<V3>,
     intensity: W<Color>,
-    normal: W<Vec3>,
+    normal: W<V3>,
     #[serde(flatten)]
     shape: AreaLightShape,
 }
@@ -306,7 +296,7 @@ enum ShapeType {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct SphereData {
-    center: W<Vec3>,
+    center: W<V3>,
     radius: Real,
 }
 
@@ -315,24 +305,24 @@ struct SphereData {
 enum BoxData {
     MinMaxPoint {
         #[serde(alias = "minPt")]
-        min: W<Vec3>,
+        min: W<V3>,
         #[serde(alias = "maxPt")]
-        max: W<Vec3>,
+        max: W<V3>,
     },
     CenterExtent {
-        center: W<Vec3>,
-        extent: W<Vec3>,
+        center: W<V3>,
+        extent: W<V3>,
     },
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 struct TriangleData {
     #[serde(alias = "v0")]
-    a: W<Vec3>,
+    a: W<V3>,
     #[serde(alias = "v1")]
-    b: W<Vec3>,
+    b: W<V3>,
     #[serde(alias = "v2")]
-    c: W<Vec3>,
+    c: W<V3>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -354,10 +344,10 @@ struct InstanceData {
 #[serde(rename_all = "lowercase")]
 enum TransformData {
     Translate {
-        amount: W<Vec3>,
+        amount: W<V3>,
     },
     Scale {
-        amount: W<Vec3>,
+        amount: W<V3>,
     },
     #[serde(alias = "rotation")]
     Rotate {
@@ -443,21 +433,24 @@ pub fn parse_scene(
     // Create camera
     let mut camera: Box<dyn crate::camera::Camera> = match &scene.cameras[camera_index].camera_type
     {
-        CameraType::Perspective(perspective) => Box::new(PerspectiveCamera::new(
-            perspective.position.0,
-            &perspective
-                .orientation
-                .get_view_direction(perspective.position.0),
-            aspect_ratio,
-            perspective.focal_length,
-        )),
-        CameraType::Orthographic(orthographic) => Box::new(OrthographicCamera::new(
-            orthographic.position.0,
-            &orthographic
-                .orientation
-                .get_view_direction(orthographic.position.0),
-            aspect_ratio,
-        )),
+        CameraType::Perspective(perspective) => {
+            let position = P3::from(perspective.position.0);
+            Box::new(PerspectiveCamera::new(
+                position,
+                &perspective.orientation.get_view_direction(position),
+                aspect_ratio,
+                perspective.focal_length,
+            ))
+        }
+        CameraType::Orthographic(orthographic) => {
+            let position = P3::from(orthographic.position.0);
+
+            Box::new(OrthographicCamera::new(
+                position,
+                &orthographic.orientation.get_view_direction(position),
+                aspect_ratio,
+            ))
+        }
     };
 
     // Set image size
@@ -500,6 +493,58 @@ pub fn parse_scene(
         shaders.insert(shader_name, shader);
     }
 
+    // Create instances
+    let mut instances: HashMap<String, Arc<dyn Shape>> = HashMap::new();
+    for shape in scene.instances.iter() {
+        let instance_name = Box::leak(shape.name.clone().into_boxed_str());
+        let shader = Arc::new(NullShader::default());
+        let shape: Arc<dyn Shape> = match &shape.shape {
+            ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
+                P3::from(sphere.center.0),
+                sphere.radius,
+                shader,
+                instance_name,
+            )),
+            ShapeType::Box(cuboid) => Arc::new(match cuboid {
+                BoxData::MinMaxPoint {
+                    min: min_point,
+                    max: max_point,
+                } => Cuboid::new(
+                    P3::from(min_point.0),
+                    P3::from(max_point.0),
+                    shader,
+                    instance_name,
+                ),
+                BoxData::CenterExtent { center, extent } => {
+                    let center = P3::from(center.0);
+                    let half_extent = extent.0 / 2.0;
+                    let min_point = center - half_extent;
+                    let max_point = center + half_extent;
+                    Cuboid::new(min_point, max_point, shader, instance_name)
+                }
+            }),
+            ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
+                P3::from(triangle.a.0),
+                P3::from(triangle.b.0),
+                P3::from(triangle.c.0),
+                shader,
+                instance_name,
+            )),
+            ShapeType::Mesh(mesh) => {
+                // TODO: this should be done differently
+                let model_path = String::from(
+                    Path::new(&scene_data_path)
+                        .join(&mesh.model_path)
+                        .to_str()
+                        .expect("failed to convert model path to string"),
+                );
+                Arc::new(Mesh::new(model_path, shader, instance_name))
+            }
+            ShapeType::Instance(_) => panic!("An instanced shape can not be type instance"),
+        };
+        instances.insert(instance_name.to_string(), shape);
+    }
+
     // normal shader
     let normal_shader = Arc::new(NormalShader::default());
 
@@ -533,7 +578,7 @@ pub fn parse_scene(
         }
         let shape: Arc<dyn Shape> = match &shape.shape {
             ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
-                sphere.center.0,
+                P3::from(sphere.center.0),
                 sphere.radius,
                 shader,
                 shape_name,
@@ -542,18 +587,24 @@ pub fn parse_scene(
                 BoxData::MinMaxPoint {
                     min: min_point,
                     max: max_point,
-                } => Cuboid::new(min_point.0, max_point.0, shader, shape_name),
+                } => Cuboid::new(
+                    P3::from(min_point.0),
+                    P3::from(max_point.0),
+                    shader,
+                    shape_name,
+                ),
                 BoxData::CenterExtent { center, extent } => {
+                    let center = P3::from(center.0);
                     let half_extent = extent.0 / 2.0;
-                    let min_point = center.0 - half_extent;
-                    let max_point = center.0 + half_extent;
+                    let min_point = center - half_extent;
+                    let max_point = center + half_extent;
                     Cuboid::new(min_point, max_point, shader, shape_name)
                 }
             }),
             ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
-                triangle.a.0,
-                triangle.b.0,
-                triangle.c.0,
+                P3::from(triangle.a.0),
+                P3::from(triangle.b.0),
+                P3::from(triangle.c.0),
                 shader,
                 shape_name,
             )),
@@ -567,7 +618,39 @@ pub fn parse_scene(
                 );
                 Arc::new(Mesh::new(model_path, shader, shape_name))
             }
-            _ => unimplemented!("shape type not implemented yet"),
+            ShapeType::Instance(instance) => {
+                let shape = instances
+                    .get(&instance.instance_of)
+                    .expect("instance ID is not a valid instance")
+                    .clone();
+                let mut translate = V3::default();
+                let mut scale = V3::new(1.0, 1.0, 1.0);
+                let mut rotate = Rotation3::identity();
+                for transformation in instance.transform.iter() {
+                    match transformation {
+                        TransformData::Translate { amount } => translate += amount.0,
+                        TransformData::Scale { amount } => scale.component_mul_assign(&amount.0),
+                        TransformData::Rotate { axis, degrees } => {
+                            let angle = PI * degrees / 180.0;
+                            let axis = match axis {
+                                RotationAxis::X => V3::x_axis(),
+                                RotationAxis::Y => V3::y_axis(),
+                                RotationAxis::Z => V3::z_axis(),
+                            };
+                            rotate *= Rotation3::from_axis_angle(&axis, angle)
+                        }
+                    }
+                }
+
+                Arc::new(Instance::new(
+                    shape,
+                    Translation3::from(translate),
+                    rotate,
+                    Scale3::from(scale),
+                    shader,
+                    shape_name,
+                ))
+            }
         };
         shapes.push(shape);
     }
@@ -580,7 +663,7 @@ pub fn parse_scene(
                 Box::new(AmbientLight::new(ambient_light.intensity.0))
             }
             LightType::Point(point_light) => Box::new(PointLight::new(
-                point_light.position.0,
+                P3::from(point_light.position.0),
                 point_light.intensity.0,
             )),
             _ => unimplemented!("light type not implemented yet"),
@@ -588,19 +671,26 @@ pub fn parse_scene(
         lights.push(light);
     }
 
-    // // get background color
-    // let background_color = if render_normals {
-    //     default();
-    // } else {
-    //     scene.background_color.unwrap_or(DEFAULT_BACKGROUND_COLOR)
-    // };
+    // get background color
+    let background_color = if render_normals {
+        color!(0.0, 0.0, 0.0)
+    } else if let Some(background) = scene.scene_parameters.background {
+        match background {
+            Background::BackgroundColor { background_color } => background_color.0,
+            Background::EnvMap(_) => {
+                unimplemented!("environment maps aren't implemented yet")
+            }
+        }
+    } else {
+        DEFAULT_BACKGROUND_COLOR
+    };
 
     let shape_refs = shapes.clone();
     let bvh = BVH::new(shape_refs);
 
     let scene = Scene {
         disable_shadows,
-        background_color: color!(0.0, 0.0, 0.0),
+        background_color,
         camera,
         shapes,
         shaders,

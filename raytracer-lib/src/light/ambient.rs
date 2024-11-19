@@ -1,4 +1,4 @@
-use crate::{prelude::*, vec3};
+use crate::prelude::*;
 
 use super::Light;
 
@@ -18,11 +18,11 @@ impl Light for AmbientLight {
         self.intensity
     }
 
-    fn get_position(&self) -> crate::Vec3 {
-        vec3!(0.0, 0.0, 0.0)
+    fn get_position(&self) -> P3 {
+        P3::default()
     }
 
-    fn illuminates(&self, hit: &crate::shader::Hit) -> Option<Vec3> {
-        Some(hit.normal)
+    fn illuminates(&self, hit: &crate::shader::Hit) -> Option<V3> {
+        Some(hit.normal.into_inner())
     }
 }

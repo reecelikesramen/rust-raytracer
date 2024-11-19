@@ -2,7 +2,7 @@ use std::{fmt, marker::PhantomData, str::FromStr};
 
 use crate::prelude::*;
 
-use nalgebra::{coordinates::XYZ, Scalar, Vector3};
+use na::{coordinates::XYZ, Scalar, Vector3};
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
