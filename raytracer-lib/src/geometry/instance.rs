@@ -26,20 +26,18 @@ impl Instance {
         shader: Arc<dyn Shader>,
         name: &'static str,
     ) -> Self {
-        let scaling_err_msg = format!("The scaling applied to {} is not invertible", name);
         let transform =
             translation.to_homogeneous() * rotation.to_homogeneous() * scale.to_homogeneous();
-        let inv_transform = translation.inverse().to_homogeneous()
-            * rotation.inverse().to_homogeneous()
-            * scale
-                .try_inverse()
-                .expect(&scaling_err_msg)
-                .to_homogeneous();
-        let normal_matrix = rotation.inverse().to_homogeneous()
-            * scale
-                .try_inverse()
-                .expect(&scaling_err_msg)
-                .to_homogeneous();
+        let inv_rotate = rotation.inverse().to_homogeneous();
+        let inv_scale = scale
+            .try_inverse()
+            .expect(&format!(
+                "The scaling applied to {} is not invertible",
+                name
+            ))
+            .to_homogeneous();
+        let inv_transform = inv_scale * inv_rotate * translation.inverse().to_homogeneous();
+        let normal_matrix = (inv_scale * inv_rotate).transpose();
 
         let bbox = shape.get_bbox().transform(&transform);
         Self {
@@ -82,17 +80,14 @@ impl Shape for Instance {
         };
         hit.ray = transformed_ray;
 
-        if !self.shape.closest_hit(hit) {
+        let did_hit = self.shape.closest_hit(hit);
+        hit.ray = og_ray; // reset the ray
+        if !did_hit {
             return false;
         }
 
-        // ray is in model local space
-        // normal is in model local space
-
         let normal = self.normal_matrix.transform_vector(&hit.normal);
-
         hit.normal = Unit::new_normalize(normal);
-        hit.ray = og_ray;
         hit.shape = Some(self);
 
         true
