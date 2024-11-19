@@ -1,12 +1,11 @@
 mod parse_vec3;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{camera::*, color, geometry::*, light::*, prelude::*, shader::*};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
-    process::exit,
     sync::Arc,
 };
 
@@ -36,13 +35,15 @@ pub struct Scene {
     pub image_height: u32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct SceneModel {
     scene: SceneData,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct SceneData {
+    #[serde(alias = "sceneParameters", default)]
+    scene_parameters: SceneParameters,
     #[serde(alias = "camera")]
     cameras: Vec<CameraData>,
     #[serde(alias = "light", default)]
@@ -55,18 +56,16 @@ struct SceneData {
     textures: Vec<TextureData>,
     #[serde(alias = "instance", default)]
     instances: Vec<ShapeData>,
-    #[serde(alias = "sceneParameters", default)]
-    scene_parameters: SceneParameters,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 struct SceneParameters {
     #[serde(flatten)]
     background: Option<Background>,
     camera: Option<String>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum Background {
     EnvMap(EnvironmentMap),
@@ -77,7 +76,7 @@ enum Background {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum EnvironmentMap {
     Prefix {
@@ -90,17 +89,17 @@ enum EnvironmentMap {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct CameraData {
     #[serde(rename = "_name")]
     name: String,
-    #[serde(alias = "imagePlaneWidth", default)]
-    image_plane_width: Option<Real>,
     #[serde(flatten)]
     camera_type: CameraType,
+    #[serde(alias = "imagePlaneWidth", default)]
+    image_plane_width: Option<Real>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "_type")]
 enum CameraType {
     #[serde(alias = "perspective")]
@@ -109,7 +108,7 @@ enum CameraType {
     Orthographic(OrthographicCameraData),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct PerspectiveCameraData {
     position: W<Vec3>,
     #[serde(flatten)]
@@ -118,14 +117,14 @@ struct PerspectiveCameraData {
     focal_length: Real,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct OrthographicCameraData {
     position: W<Vec3>,
     #[serde(flatten)]
     orientation: CameraOrientation,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum CameraOrientation {
     ViewDir {
@@ -142,13 +141,13 @@ enum CameraOrientation {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct LightData {
     #[serde(flatten)]
     light_type: LightType,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "_type")]
 #[serde(rename_all = "lowercase")]
 enum LightType {
@@ -158,18 +157,18 @@ enum LightType {
     Ambient(AmbientLightData),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct PointLightData {
     position: W<Vec3>,
     intensity: W<Color>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct AmbientLightData {
     intensity: W<Color>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct AreaLightData {
     position: W<Vec3>,
     intensity: W<Color>,
@@ -178,20 +177,20 @@ struct AreaLightData {
     shape: AreaLightShape,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct ShapeLightData {
     intensity: W<Color>,
     shape: ShapeData,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum AreaLightShape {
     Rectangular { length: Real, width: Real },
     Circular { radius: Real },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct ShaderData {
     #[serde(rename = "_name")]
     name: String,
@@ -199,7 +198,7 @@ struct ShaderData {
     shader: ShaderType,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "_type")]
 enum ShaderType {
     Diffuse,
@@ -214,7 +213,7 @@ enum ShaderType {
     Dielectric,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum MaterialProperty {
     Color(W<Color>),
@@ -226,12 +225,12 @@ enum MaterialProperty {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct LambertianShaderData {
     diffuse: MaterialProperty,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct BlinnPhongShaderData {
     diffuse: MaterialProperty,
     specular: MaterialProperty,
@@ -239,28 +238,58 @@ struct BlinnPhongShaderData {
     shininess: f32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct GGXMirrorShaderData {
     roughness: Real,
     samples: u32,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct ShaderRef {
     #[serde(rename = "_ref")]
     name: String,
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(untagged)]
+enum ShaderRefType {
+    Nested(ShaderRef),
+    Inline(String),
+}
+
+impl ShaderRefType {
+    fn name(&self) -> &String {
+        match self {
+            ShaderRefType::Nested(ShaderRef { name }) => name,
+            ShaderRefType::Inline(name) => name,
+        }
+    }
+}
+
+impl Serialize for ShaderRefType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        match self {
+            ShaderRefType::Nested(ShaderRef { name }) => serializer.serialize_str(name),
+            ShaderRefType::Inline(name) => serializer.serialize_str(name),
+        }
+    }
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 struct ShapeData {
     #[serde(rename = "_name")]
     name: String,
-    shader: ShaderRef,
+    #[serde(rename = "_shader")]
+    #[serde(alias = "shader")]
+    shader: ShaderRefType,
     #[serde(flatten)]
     shape: ShapeType,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "_type")]
 #[serde(rename_all = "lowercase")]
 enum ShapeType {
@@ -271,13 +300,13 @@ enum ShapeType {
     Instance(InstanceData),
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct SphereData {
     center: W<Vec3>,
     radius: Real,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 enum BoxData {
     MinMaxPoint {
@@ -292,7 +321,7 @@ enum BoxData {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct TriangleData {
     #[serde(alias = "v0")]
     a: W<Vec3>,
@@ -302,13 +331,13 @@ struct TriangleData {
     c: W<Vec3>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct MeshData {
     #[serde(alias = "file")]
     model_path: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct InstanceData {
     #[serde(alias = "_id")]
     instance_of: String,
@@ -316,7 +345,7 @@ struct InstanceData {
     transform: Vec<TransformData>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "type")]
 #[serde(rename_all = "lowercase")]
 enum TransformData {
@@ -334,7 +363,7 @@ enum TransformData {
     },
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 enum RotationAxis {
     #[serde(alias = "x")]
     X,
@@ -344,7 +373,7 @@ enum RotationAxis {
     Z,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 struct TextureData {
     #[serde(alias = "sourcefile")]
     image_path: String,
@@ -363,14 +392,16 @@ pub fn parse_scene(
     render_normals: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
     let scene_file: SceneModel = serde_json::from_str(scene_json)?;
-    let scene = scene_file.scene;
 
     // print scene data
     #[cfg(debug_assertions)]
-    println!("{:#?}", scene);
+    println!("{:#?}", scene_file.scene);
 
-    exit(0);
+    // serialize scene to file
+    let scene_data_path = Path::new("rewrite.json");
+    serde_json::to_writer_pretty(std::fs::File::create(&scene_data_path)?, &scene_file)?;
 
+    let scene = scene_file.scene;
     // Check that there is exactly one camera
     if scene.cameras.len() != 1 {
         return Err(Box::new(std::io::Error::new(
@@ -477,7 +508,7 @@ pub fn parse_scene(
     for shape in scene.shapes.iter() {
         // extract shader, or just use normal shader
         let shader = if !render_normals {
-            match shaders.get(&shape.shader.name) {
+            match shaders.get(shape.shader.name()) {
                 Some(s) => Arc::clone(s),
                 None => {
                     return Err(Box::new(std::io::Error::new(
