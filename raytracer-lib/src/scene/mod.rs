@@ -10,7 +10,6 @@ use std::{
 };
 
 /// TODO:
-/// - Multiple cameras allowed, select with scene_parameters.camera [model done]
 /// - Instanced models [model done]
 /// - Transforms for instanced models [model done]
 /// - Textures [model done]
@@ -135,10 +134,15 @@ enum CameraOrientation {
         #[serde(alias = "lookatPoint")]
         lookat_point: W<Vec3>,
     },
-    LookAtShape {
-        #[serde(alias = "lookatShape")]
-        lookat_shape: String,
-    },
+}
+
+impl CameraOrientation {
+    pub fn get_view_direction(&self, position: Vec3) -> Vec3 {
+        match self {
+            CameraOrientation::ViewDir { view_dir } => view_dir.0,
+            CameraOrientation::LookAtPoint { lookat_point } => lookat_point.0 - position,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -392,23 +396,11 @@ pub fn parse_scene(
     render_normals: bool,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
     let scene_file: SceneModel = serde_json::from_str(scene_json)?;
+    let scene = scene_file.scene;
 
     // print scene data
     #[cfg(debug_assertions)]
-    println!("{:#?}", scene_file.scene);
-
-    // serialize scene to file
-    let scene_data_path = Path::new("rewrite.json");
-    serde_json::to_writer_pretty(std::fs::File::create(&scene_data_path)?, &scene_file)?;
-
-    let scene = scene_file.scene;
-    // Check that there is exactly one camera
-    if scene.cameras.len() != 1 {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "scene must have exactly one camera",
-        )));
-    }
+    println!("{:#?}", scene);
 
     // Image size or default
     let image_width = image_width.unwrap_or(DEFAULT_IMAGE_WIDTH);
@@ -417,51 +409,62 @@ pub fn parse_scene(
     // Calculate aspect ratio if not specified
     let aspect_ratio = aspect_ratio.unwrap_or(image_width as Real / image_height as Real);
 
-    // Create camera
-    let mut camera: Box<dyn crate::camera::Camera> = match &scene.cameras[0].camera_type {
-        CameraType::Perspective(perspective) => {
-            // View direction or calculate from camera position and lookat point
-            let view_dir: Vec3 = match &perspective.orientation {
-                CameraOrientation::ViewDir { view_dir } => view_dir.0,
-                CameraOrientation::LookAtPoint { lookat_point } => {
-                    lookat_point.0 - perspective.position.0
-                }
-                CameraOrientation::LookAtShape { lookat_shape: _ } => {
-                    unimplemented!("look at shape not implemented yet")
-                }
-            };
+    // Check that there is exactly one camera
+    if scene.cameras.is_empty() {
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "scene must have at least one camera",
+        )));
+    }
 
-            Box::new(PerspectiveCamera::new(
-                perspective.position.0,
-                &view_dir,
-                aspect_ratio,
-                perspective.focal_length,
-            ))
-        }
-        CameraType::Orthographic(orthographic) => {
-            // View direction or calculate from camera position and lookat point
-            let view_dir: Vec3 = match &orthographic.orientation {
-                CameraOrientation::ViewDir { view_dir } => view_dir.0,
-                CameraOrientation::LookAtPoint { lookat_point } => {
-                    lookat_point.0 - orthographic.position.0
-                }
-                CameraOrientation::LookAtShape { lookat_shape: _ } => {
-                    unimplemented!("look at shape not implemented yet")
-                }
-            };
+    // Select camera
+    let camera_index = if scene.cameras.len() == 1 {
+        0
+    } else {
+        // camera name specified or default
+        let camera_name = scene
+            .scene_parameters
+            .camera
+            .unwrap_or(DEFAULT_CAMERA.to_string());
 
-            Box::new(OrthographicCamera::new(
-                orthographic.position.0,
-                &view_dir,
-                aspect_ratio,
-            ))
-        }
+        // filter scene.cameras by name
+        scene
+            .cameras
+            .iter()
+            .position(|c| c.name == camera_name)
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("camera {} not found", camera_name),
+                )
+            })?
     };
 
+    // Create camera
+    let mut camera: Box<dyn crate::camera::Camera> = match &scene.cameras[camera_index].camera_type
+    {
+        CameraType::Perspective(perspective) => Box::new(PerspectiveCamera::new(
+            perspective.position.0,
+            &perspective
+                .orientation
+                .get_view_direction(perspective.position.0),
+            aspect_ratio,
+            perspective.focal_length,
+        )),
+        CameraType::Orthographic(orthographic) => Box::new(OrthographicCamera::new(
+            orthographic.position.0,
+            &orthographic
+                .orientation
+                .get_view_direction(orthographic.position.0),
+            aspect_ratio,
+        )),
+    };
+
+    // Set image size
     camera.set_image_pixels(image_width, image_height);
 
     // Create shaders
-    let mut shaders: HashMap<String, Arc<dyn crate::shader::Shader>> = HashMap::new();
+    let mut shaders: HashMap<String, Arc<dyn Shader>> = HashMap::new();
     for shader in scene.shaders.iter() {
         let shader_name = shader.name.clone();
         let shader: Arc<dyn Shader> = match &shader.shader {
@@ -492,7 +495,7 @@ pub fn parse_scene(
             ShaderType::GGXMirror(mirror) => {
                 Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
             }
-            _ => unimplemented!("shader type not implemented yet"),
+            _ => Arc::new(NullShader::default()),
         };
         shaders.insert(shader_name, shader);
     }
@@ -564,7 +567,7 @@ pub fn parse_scene(
                 );
                 Arc::new(Mesh::new(model_path, shader, shape_name))
             }
-            _ => unimplemented!(),
+            _ => unimplemented!("shape type not implemented yet"),
         };
         shapes.push(shape);
     }

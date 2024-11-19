@@ -8,12 +8,13 @@ mod normal;
 mod null;
 mod perfect_mirror;
 
-pub use self::blinn_phong::BlinnPhongShader;
-pub use self::ggx_mirror::GGXMirrorShader;
-pub use self::hit_struct::Hit;
-pub use self::lambertian::LambertianShader;
-pub use self::normal::NormalShader;
-pub use self::perfect_mirror::PerfectMirrorShader;
+pub use blinn_phong::BlinnPhongShader;
+pub use ggx_mirror::GGXMirrorShader;
+pub use hit_struct::Hit;
+pub use lambertian::LambertianShader;
+pub use normal::NormalShader;
+pub use null::NullShader;
+pub use perfect_mirror::PerfectMirrorShader;
 
 pub trait Shader: Send + Sync + std::fmt::Debug {
     fn apply(&self, hit: &Hit) -> Color;
