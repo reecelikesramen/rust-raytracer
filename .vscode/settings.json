@@ -11,6 +11,11 @@
     ".aider*": true,
     "cpp": true
   },
+  "search.exclude": {
+    "**/target": true,
+    ".aider*": true,
+    "cpp": true
+  },
   "[rust]": {
     "editor.formatOnSave": true,
     "editor.defaultFormatter": "rust-lang.rust-analyzer",

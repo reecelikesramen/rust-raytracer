@@ -83,6 +83,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let pb = indicatif::ProgressBar::new((scene.image_width * scene.image_height) as u64);
+
+    pb.set_style(indicatif::ProgressStyle::default_bar().template("{wide_bar} {percent}% ")?);
+
     let per_pixel_cb = || {
         pb.inc(1);
     };
