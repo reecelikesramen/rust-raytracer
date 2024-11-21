@@ -1,4 +1,10 @@
-use crate::prelude::*;
+use crate::{
+    material::Material,
+    prelude::*,
+    shader::{Hit, Shader},
+};
+
+use std::{fmt::Debug, sync::Arc};
 
 mod bbox;
 mod bvh;
@@ -25,11 +31,12 @@ pub enum ShapeType {
     Plane,
 }
 
-pub trait Shape: Send + Sync + std::fmt::Debug {
+pub trait Shape: Send + Sync + Debug {
     fn get_type(&self) -> ShapeType;
     fn get_name(&self) -> &str;
-    fn get_bbox(&self) -> &bbox::BBox;
+    fn get_bbox(&self) -> &BBox;
     fn get_centroid(&self) -> P3;
-    fn get_shader(&self) -> std::sync::Arc<dyn crate::shader::Shader>;
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool;
+    fn get_shader(&self) -> Arc<dyn Shader>;
+    fn get_material(&self) -> Arc<dyn Material>;
+    fn closest_hit<'hit>(&'hit self, hit: &mut Hit<'hit>) -> bool;
 }

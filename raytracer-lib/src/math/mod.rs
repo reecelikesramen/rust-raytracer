@@ -1,5 +1,7 @@
 mod coordinate_system;
 mod ray;
+mod vector;
 
-pub use self::coordinate_system::{create_coordinate_system, CoordinateSystem};
-pub use self::ray::Ray;
+pub use coordinate_system::{create_coordinate_system, CoordinateSystem};
+pub use ray::Ray;
+pub use vector::*;
