@@ -3,7 +3,16 @@ mod parse_vec3;
 use na::{Rotation3, Scale3, Translation3};
 use serde::{Deserialize, Serialize};
 
-use crate::{camera::*, color, geometry::*, light::*, prelude::*, shader::*, V3};
+use crate::{
+    camera::*,
+    color,
+    geometry::*,
+    light::*,
+    material::{Dielectric, Diffuse, Lambertian, Material, Metal},
+    prelude::*,
+    shader::*,
+    V3,
+};
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
@@ -195,7 +204,7 @@ struct ShaderData {
 #[derive(Deserialize, Serialize, Debug)]
 #[serde(tag = "_type")]
 enum ShaderType {
-    Diffuse,
+    Diffuse(DiffuseShaderData),
     Lambertian(LambertianShaderData),
     BlinnPhong(BlinnPhongShaderData),
     #[serde(alias = "Mirror")]
@@ -204,7 +213,8 @@ enum ShaderType {
     #[serde(alias = "BlinnPhongMirrored")]
     BlinnPhongMirror,
     Glaze,
-    Dielectric,
+    Dielectric(DielectricShaderData),
+    Metal(MetalShaderData),
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -222,6 +232,8 @@ enum MaterialProperty {
 #[derive(Deserialize, Serialize, Debug)]
 struct LambertianShaderData {
     diffuse: MaterialProperty,
+    #[serde(default)]
+    samples: u32,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -239,22 +251,41 @@ struct GGXMirrorShaderData {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-struct ShaderRef {
-    #[serde(rename = "_ref")]
-    name: String,
+struct DiffuseShaderData {
+    diffuse: MaterialProperty,
+    #[serde(default)]
+    samples: u32,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct MetalShaderData {
+    albedo: MaterialProperty,
+    fuzz: Real,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+struct DielectricShaderData {
+    attenuation: MaterialProperty,
+    #[serde(alias = "refractionIndex")]
+    #[serde(alias = "ior")]
+    refractive_index: Real,
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(untagged)]
 enum ShaderRefType {
-    Nested(ShaderRef),
+    Nested {
+        #[serde(rename = "_ref")]
+        name: String,
+    },
     Inline(String),
 }
 
 impl ShaderRefType {
     fn name(&self) -> &String {
         match self {
-            ShaderRefType::Nested(ShaderRef { name }) => name,
+            ShaderRefType::Nested { name } => name,
             ShaderRefType::Inline(name) => name,
         }
     }
@@ -266,7 +297,7 @@ impl Serialize for ShaderRefType {
         S: serde::Serializer,
     {
         match self {
-            ShaderRefType::Nested(ShaderRef { name }) => serializer.serialize_str(name),
+            ShaderRefType::Nested { name } => serializer.serialize_str(name),
             ShaderRefType::Inline(name) => serializer.serialize_str(name),
         }
     }
@@ -466,7 +497,7 @@ pub fn parse_scene(
                     MaterialProperty::Color(color) => color.0,
                     _ => unimplemented!("texture for material property not implemented yet"),
                 };
-                Arc::new(LambertianShader::new(diffuse))
+                Arc::new(LambertianShader::new(diffuse, lambertian.samples))
             }
             ShaderType::BlinnPhong(blinn_phong) => {
                 let diffuse = match &blinn_phong.diffuse {
@@ -488,9 +519,56 @@ pub fn parse_scene(
             ShaderType::GGXMirror(mirror) => {
                 Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
             }
+            ShaderType::Diffuse(diffuse) => {
+                let albedo = match &diffuse.diffuse {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+                Arc::new(DiffuseShader::new(albedo, diffuse.samples))
+            }
             _ => Arc::new(NullShader::default()),
         };
         shaders.insert(shader_name, shader);
+    }
+
+    // Create materials
+    let mut materials: HashMap<String, Arc<dyn Material>> = HashMap::new();
+    for shader in scene.shaders.iter() {
+        let material_name = shader.name.clone();
+        let material: Arc<dyn Material> = match &shader.shader {
+            ShaderType::Lambertian(lambertian) => {
+                let albedo = match &lambertian.diffuse {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+
+                Arc::new(Lambertian::new(albedo))
+            }
+            ShaderType::Diffuse(diffuse) => {
+                let albedo = match &diffuse.diffuse {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+
+                Arc::new(Diffuse::new(albedo))
+            }
+            ShaderType::Metal(metal) => {
+                let albedo = match &metal.albedo {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+                Arc::new(Metal::new(albedo, metal.fuzz))
+            }
+            ShaderType::Dielectric(dielectric) => {
+                let attenuation = match &dielectric.attenuation {
+                    MaterialProperty::Color(color) => color.0,
+                    _ => unimplemented!("texture for material property not implemented yet"),
+                };
+                Arc::new(Dielectric::new(attenuation, dielectric.refractive_index))
+            }
+            _ => Arc::new(Lambertian::new(color!(1.0, 0.0, 1.0))),
+        };
+        materials.insert(material_name, material);
     }
 
     // Create instances
@@ -498,11 +576,13 @@ pub fn parse_scene(
     for shape in scene.instances.iter() {
         let instance_name = Box::leak(shape.name.clone().into_boxed_str());
         let shader = Arc::new(NullShader::default());
+        let material = Arc::new(Lambertian::new(color!(0.0, 0.0, 0.0)));
         let shape: Arc<dyn Shape> = match &shape.shape {
             ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
                 P3::from(sphere.center.0),
                 sphere.radius,
                 shader,
+                material,
                 instance_name,
             )),
             ShapeType::Box(cuboid) => Arc::new(match cuboid {
@@ -513,6 +593,7 @@ pub fn parse_scene(
                     P3::from(min_point.0),
                     P3::from(max_point.0),
                     shader,
+                    material,
                     instance_name,
                 ),
                 BoxData::CenterExtent { center, extent } => {
@@ -520,7 +601,7 @@ pub fn parse_scene(
                     let half_extent = extent.0 / 2.0;
                     let min_point = center - half_extent;
                     let max_point = center + half_extent;
-                    Cuboid::new(min_point, max_point, shader, instance_name)
+                    Cuboid::new(min_point, max_point, shader, material, instance_name)
                 }
             }),
             ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
@@ -528,6 +609,7 @@ pub fn parse_scene(
                 P3::from(triangle.b.0),
                 P3::from(triangle.c.0),
                 shader,
+                material,
                 instance_name,
             )),
             ShapeType::Mesh(mesh) => {
@@ -538,7 +620,7 @@ pub fn parse_scene(
                         .to_str()
                         .expect("failed to convert model path to string"),
                 );
-                Arc::new(Mesh::new(model_path, shader, instance_name))
+                Arc::new(Mesh::new(model_path, shader, material, instance_name))
             }
             ShapeType::Instance(_) => panic!("An instanced shape can not be type instance"),
         };
@@ -569,6 +651,17 @@ pub fn parse_scene(
             Arc::clone(&normal_shader)
         };
 
+        // extract material
+        let material = match materials.get(shape.shader.name()) {
+            Some(s) => Arc::clone(s),
+            None => {
+                return Err(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "shape references non-existent material",
+                )))
+            }
+        };
+
         let shape_name = Box::leak(shape.name.clone().into_boxed_str());
         if !shape_names.insert(shape_name) {
             return Err(Box::new(std::io::Error::new(
@@ -581,6 +674,7 @@ pub fn parse_scene(
                 P3::from(sphere.center.0),
                 sphere.radius,
                 shader,
+                material,
                 shape_name,
             )),
             ShapeType::Box(cuboid) => Arc::new(match cuboid {
@@ -591,6 +685,7 @@ pub fn parse_scene(
                     P3::from(min_point.0),
                     P3::from(max_point.0),
                     shader,
+                    material,
                     shape_name,
                 ),
                 BoxData::CenterExtent { center, extent } => {
@@ -598,7 +693,7 @@ pub fn parse_scene(
                     let half_extent = extent.0 / 2.0;
                     let min_point = center - half_extent;
                     let max_point = center + half_extent;
-                    Cuboid::new(min_point, max_point, shader, shape_name)
+                    Cuboid::new(min_point, max_point, shader, material, shape_name)
                 }
             }),
             ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
@@ -606,6 +701,7 @@ pub fn parse_scene(
                 P3::from(triangle.b.0),
                 P3::from(triangle.c.0),
                 shader,
+                material,
                 shape_name,
             )),
             ShapeType::Mesh(mesh) => {
@@ -616,7 +712,7 @@ pub fn parse_scene(
                         .to_str()
                         .expect("failed to convert model path to string"),
                 );
-                Arc::new(Mesh::new(model_path, shader, shape_name))
+                Arc::new(Mesh::new(model_path, shader, material, shape_name))
             }
             ShapeType::Instance(instance) => {
                 let shape = instances
@@ -659,6 +755,7 @@ pub fn parse_scene(
                     rotation,
                     Scale3::from(scale),
                     shader,
+                    material,
                     shape_name,
                 ))
             }

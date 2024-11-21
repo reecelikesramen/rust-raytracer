@@ -86,6 +86,7 @@ fn ray_color<'pixel>(scene: &'pixel Scene, mut hit: Hit<'pixel>) -> Color {
 
     if scene.bvh.closest_hit(&mut hit) {
         if let Some((ray, attenuation)) = hit.shape.unwrap().get_material().scatter(&hit) {
+            // TODO: can exit early out of this recursion if the total color is significantly near zero
             attenuation.component_mul(&ray_color(&scene, hit.bounce(ray)))
         } else {
             color!(0.0, 0.0, 0.0)
