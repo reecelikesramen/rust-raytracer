@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use na::Unit;
 
+use super::*;
 use super::{BBox, Shape, ShapeType};
 use crate::shader::Shader;
-use crate::{prelude::*, V3};
 
 #[derive(Debug)]
 pub struct Sphere {
@@ -12,11 +12,18 @@ pub struct Sphere {
     radius: Real,
     bbox: BBox,
     shader: Arc<dyn Shader>,
+    material: Arc<dyn Material>,
     name: &'static str,
 }
 
 impl Sphere {
-    pub fn new(center: P3, radius: Real, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(
+        center: P3,
+        radius: Real,
+        shader: Arc<dyn Shader>,
+        material: Arc<dyn Material>,
+        name: &'static str,
+    ) -> Self {
         Self {
             center,
             radius,
@@ -25,12 +32,14 @@ impl Sphere {
                 center + V3::new(radius, radius, radius),
             ),
             shader,
+            material,
             name,
         }
     }
 
-    pub fn normal(&self, point: &P3) -> V3 {
-        point - self.center
+    #[inline(always)]
+    pub fn normal(&self, point: &P3) -> Unit<V3> {
+        Unit::new_normalize(point - self.center)
     }
 }
 
@@ -52,7 +61,11 @@ impl Shape for Sphere {
     }
 
     fn get_shader(&self) -> Arc<dyn Shader> {
-        Arc::clone(&self.shader)
+        self.shader.clone()
+    }
+
+    fn get_material(&self) -> Arc<dyn Material> {
+        self.material.clone()
     }
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
@@ -83,7 +96,7 @@ impl Shape for Sphere {
             return false;
         }
 
-        hit.normal = Unit::new_normalize(self.normal(&hit.hit_point()));
+        hit.set_normal(self.normal(&hit.hit_point()));
         hit.shape = Some(self);
         true
     }

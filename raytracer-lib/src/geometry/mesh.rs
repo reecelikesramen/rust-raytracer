@@ -1,8 +1,8 @@
-use std::sync::Arc;
+use super::*;
 
 use tobj::load_obj;
 
-use crate::{prelude::*, shader::Shader};
+use crate::shader::Shader;
 
 use super::{BBox, Shape, Triangle, BVH};
 
@@ -11,11 +11,17 @@ pub struct Mesh {
     bvh: BVH,
     bbox: BBox,
     shader: Arc<dyn Shader>,
+    material: Arc<dyn Material>,
     name: &'static str,
 }
 
 impl Mesh {
-    pub fn new(model_path: String, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(
+        model_path: String,
+        shader: Arc<dyn Shader>,
+        material: Arc<dyn Material>,
+        name: &'static str,
+    ) -> Self {
         let (models, _) = load_obj(
             model_path,
             &tobj::LoadOptions {
@@ -52,6 +58,7 @@ impl Mesh {
                     positions[i[1] as usize],
                     positions[i[2] as usize],
                     shader.clone(),
+                    material.clone(),
                     name,
                 )) as Arc<dyn Shape>
             })
@@ -62,6 +69,7 @@ impl Mesh {
             bvh,
             bbox,
             shader,
+            material,
             name,
         }
     }
@@ -86,6 +94,10 @@ impl Shape for Mesh {
 
     fn get_shader(&self) -> Arc<dyn Shader> {
         self.shader.clone()
+    }
+
+    fn get_material(&self) -> Arc<dyn Material> {
+        self.material.clone()
     }
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {

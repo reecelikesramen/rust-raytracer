@@ -13,6 +13,7 @@ mod prelude;
 mod render;
 mod scene;
 mod shader;
+mod material;
 
 pub use antialias::AntialiasMethod;
 pub use framebuffer::Framebuffer;

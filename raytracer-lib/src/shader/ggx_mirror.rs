@@ -6,7 +6,7 @@ use super::{Hit, Shader};
 #[derive(Debug)]
 pub struct GGXMirrorShader {
     roughness: Real,
-    samples: u32, // Number of samples for roughness approximation
+    samples: u32,
 }
 
 impl GGXMirrorShader {
@@ -15,14 +15,6 @@ impl GGXMirrorShader {
             roughness: roughness.clamp(0.0, 1.0),
             samples,
         }
-    }
-
-    // GGX/Trowbridge-Reitz distribution function
-    fn ggx_distribution(&self, n_dot_h: Real) -> Real {
-        let alpha2 = self.roughness * self.roughness;
-        let nom = alpha2;
-        let denom = PI * (n_dot_h * n_dot_h * (alpha2 - 1.0) + 1.0).powi(2);
-        nom / denom.max(VERY_SMALL_NUMBER)
     }
 
     // Generate a microfacet normal using GGX distribution
@@ -61,33 +53,45 @@ impl Shader for GGXMirrorShader {
         let incoming = hit.ray.direction.normalize();
         let mut accumulated_color = color!(0.0, 0.0, 0.0);
 
-        // Multi-sample the roughness
-        for _ in 0..self.samples {
-            // Sample microfacet normal using GGX distribution
-            let micro_normal = self.sample_ggx(&hit.normal, &mut rng);
+        // Sample microfacet normal using GGX distribution
+        // let micro_normal = self.sample_ggx(&hit.normal, &mut rng);
 
-            // Calculate reflected direction using the sampled microfacet normal
-            let outgoing = incoming - micro_normal * (2.0 * incoming.dot(&micro_normal));
+        // Calculate reflected direction using the sampled microfacet normal
+        // let outgoing = incoming - micro_normal * (2.0 * incoming.dot(&micro_normal));
 
-            let mut mirror_hit = Hit::new(
-                crate::math::Ray {
-                    origin: hit.hit_point(),
-                    direction: outgoing.normalize(),
-                },
-                &hit.scene,
-            );
-            mirror_hit.depth = hit.depth + 1;
-            mirror_hit.t_min = VERY_SMALL_NUMBER;
+        // Take self.samples samples of the micro normal and calculate the outgoing vector
+        let mut outgoing_samples = (0..self.samples)
+            .map(|_| self.sample_ggx(&hit.normal, &mut rng))
+            .map(|micro_normal| incoming - micro_normal * (2.0 * incoming.dot(&micro_normal)))
+            .collect::<Vec<V3>>();
+
+        // sort this by the outgoing vector dot product with the hit normal
+        outgoing_samples.sort_by(|a, b| a.dot(&hit.normal).total_cmp(&b.dot(&hit.normal)));
+
+        for outgoing in outgoing_samples {
+            let mut mirror_hit = hit.bounce(crate::math::Ray {
+                origin: hit.hit_point(),
+                direction: outgoing.normalize(),
+            });
 
             // Get color for this sample
-            let sample_color = if hit.scene.bvh.closest_hit(&mut mirror_hit) {
-                mirror_hit.shape.unwrap().get_shader().apply(&mirror_hit)
-            } else {
-                hit.scene.background_color
-            };
+            hit.scene.bvh.closest_hit(&mut mirror_hit);
 
-            accumulated_color += sample_color;
+            accumulated_color += mirror_hit.hit_color();
         }
+
+        // Multi-sample the roughness
+        // for _ in 0..self.samples {
+        //     let mut mirror_hit = hit.bounce(crate::math::Ray {
+        //         origin: hit.hit_point(),
+        //         direction: outgoing.normalize(),
+        //     });
+
+        //     // Get color for this sample
+        //     hit.scene.bvh.closest_hit(&mut mirror_hit);
+
+        //     accumulated_color += mirror_hit.hit_color();
+        // }
 
         // Average the samples
         accumulated_color / self.samples as f32

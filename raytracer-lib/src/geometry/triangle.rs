@@ -1,8 +1,10 @@
+use super::*;
+
 use std::sync::Arc;
 
 use na::Unit;
 
-use crate::{prelude::*, shader::Shader, V3};
+use crate::{shader::Shader, V3};
 
 use super::{bbox::BBox, Shape};
 
@@ -14,11 +16,19 @@ pub struct Triangle {
     normal: V3,
     bbox: BBox,
     shader: Arc<dyn Shader>,
+    material: Arc<dyn Material>,
     name: &'static str,
 }
 
 impl Triangle {
-    pub fn new(a: P3, b: P3, c: P3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(
+        a: P3,
+        b: P3,
+        c: P3,
+        shader: Arc<dyn Shader>,
+        material: Arc<dyn Material>,
+        name: &'static str,
+    ) -> Self {
         let normal = (b - a).cross(&(c - a)).normalize();
         let min = P3::new(
             a.x.min(b.x).min(c.x),
@@ -37,6 +47,7 @@ impl Triangle {
             normal,
             bbox: BBox::new(min, max),
             shader,
+            material,
             name,
         }
     }
@@ -60,7 +71,11 @@ impl Shape for Triangle {
     }
 
     fn get_shader(&self) -> Arc<dyn Shader> {
-        Arc::clone(&self.shader)
+        self.shader.clone()
+    }
+
+    fn get_material(&self) -> Arc<dyn Material> {
+        self.material.clone()
     }
 
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
@@ -111,7 +126,7 @@ impl Shape for Triangle {
 
         // We have a valid hit, update the hit record
         hit.t = intersect_t;
-        hit.normal = Unit::new_unchecked(self.normal);
+        hit.set_normal(Unit::new_unchecked(self.normal));
         hit.shape = Some(self);
 
         true

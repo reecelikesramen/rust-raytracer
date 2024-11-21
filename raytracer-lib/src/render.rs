@@ -67,11 +67,7 @@ pub fn render_pixel(
             let ray = scene.camera.generate_ray(i, j, di, dj);
             let mut hit = Hit::new(ray, &scene);
 
-            if scene.bvh.closest_hit(&mut hit) {
-                color += hit.shape.unwrap().get_shader().apply(&hit);
-            } else {
-                color += scene.background_color;
-            }
+            color += ray_color(&scene, hit);
         }
     }
     // divide by number of samples
@@ -81,4 +77,20 @@ pub fn render_pixel(
         cb();
     }
     fb.set_pixel(i, j, color);
+}
+
+fn ray_color<'pixel>(scene: &'pixel Scene, mut hit: Hit<'pixel>) -> Color {
+    if hit.depth >= scene.recursion_depth {
+        return color!(0.0, 0.0, 0.0);
+    }
+
+    if scene.bvh.closest_hit(&mut hit) {
+        if let Some((ray, attenuation)) = hit.shape.unwrap().get_material().scatter(&hit) {
+            attenuation.component_mul(&ray_color(&scene, hit.bounce(ray)))
+        } else {
+            color!(0.0, 0.0, 0.0)
+        }
+    } else {
+        scene.background_color
+    }
 }

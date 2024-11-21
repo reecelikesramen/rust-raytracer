@@ -1,5 +1,4 @@
-use crate::prelude::*;
-use std::sync::Arc;
+use super::*;
 
 use na::{Matrix4, Rotation3, Scale3, Translation3, Unit};
 
@@ -14,6 +13,7 @@ pub struct Instance {
     normal_matrix: Matrix4<Real>,
     bbox: BBox,
     shader: Arc<dyn Shader>,
+    material: Arc<dyn Material>,
     name: &'static str,
 }
 
@@ -24,6 +24,7 @@ impl Instance {
         rotation: Rotation3<Real>,
         scale: Scale3<Real>,
         shader: Arc<dyn Shader>,
+        material: Arc<dyn Material>,
         name: &'static str,
     ) -> Self {
         let transform =
@@ -46,6 +47,7 @@ impl Instance {
             normal_matrix,
             bbox,
             shader,
+            material,
             name,
         }
     }
@@ -72,6 +74,10 @@ impl Shape for Instance {
         self.shader.clone()
     }
 
+    fn get_material(&self) -> Arc<dyn Material> {
+        self.material.clone()
+    }
+
     fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
         let og_ray = hit.ray;
         let transformed_ray = crate::math::Ray {
@@ -87,7 +93,7 @@ impl Shape for Instance {
         }
 
         let normal = self.normal_matrix.transform_vector(&hit.normal);
-        hit.normal = Unit::new_normalize(normal);
+        hit.set_normal(Unit::new_normalize(normal));
         hit.shape = Some(self);
 
         true

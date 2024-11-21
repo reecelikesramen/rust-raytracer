@@ -1,16 +1,18 @@
 use crate::prelude::*;
 
 mod blinn_phong;
+mod diffuse;
 mod ggx_mirror;
-mod hit_struct;
+mod hit_record;
 mod lambertian;
 mod normal;
 mod null;
 mod perfect_mirror;
 
 pub use blinn_phong::BlinnPhongShader;
+pub use diffuse::DiffuseShader;
 pub use ggx_mirror::GGXMirrorShader;
-pub use hit_struct::Hit;
+pub use hit_record::Hit;
 pub use lambertian::LambertianShader;
 pub use normal::NormalShader;
 pub use null::NullShader;

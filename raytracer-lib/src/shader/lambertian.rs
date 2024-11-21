@@ -1,37 +1,47 @@
-use crate::{color, light::Light, prelude::*};
+use crate::{
+    color,
+    math::{random_unit_v3, Ray},
+    prelude::*,
+};
 
 use super::Shader;
 
 #[derive(Debug)]
 pub struct LambertianShader {
     diffuse: Color,
+    samples: u32,
 }
 
 impl LambertianShader {
-    pub fn new(diffuse: Color) -> Self {
-        Self { diffuse }
+    pub fn new(diffuse: Color, samples: u32) -> Self {
+        Self { diffuse, samples }
     }
 }
 
 impl Shader for LambertianShader {
     fn apply(&self, hit: &super::Hit) -> Color {
-        let mut color = color!(0.0, 0.0, 0.0);
-        for (light, surface_to_light) in hit
-            .scene
-            .lights
-            .iter()
-            .filter_map(|light| {
-                light
-                    .illuminates(hit)
-                    .map(|surface_to_light| (light.as_ref(), surface_to_light))
-            })
-            .collect::<Vec<(&dyn Light, V3)>>()
-        {
-            let cos_incidence = hit.normal.dot(&surface_to_light.normalize());
-
-            color +=
-                self.diffuse.component_mul(&light.get_intensity()) * cos_incidence.max(0.0) as f32;
+        if hit.depth >= hit.scene.recursion_depth {
+            return hit.scene.background_color;
         }
-        color
+
+        let mut color = color!(0.0, 0.0, 0.0);
+
+        // Monte Carlo integration for multi-sampling
+        let mut rng = rand::thread_rng();
+        for _ in 0..self.samples {
+            let outgoing = (random_unit_v3(&mut rng) + hit.normal.into_inner()).normalize();
+            let mut indirect_hit = hit.bounce(Ray {
+                origin: hit.hit_point(),
+                direction: outgoing,
+            });
+
+            hit.scene.bvh.closest_hit(&mut indirect_hit);
+
+            let cos_incidence = hit.normal.dot(&outgoing).max(0.0);
+
+            color += self.diffuse.component_mul(&indirect_hit.hit_color()) * cos_incidence as f32;
+        }
+
+        color / self.samples as f32
     }
 }

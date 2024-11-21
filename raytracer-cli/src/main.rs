@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let fb = render(&scene, sqrt_rays_per_pixel, aa_method, Some(&per_pixel_cb));
-    save(args.output_path.as_str(), &fb);
+    save(args.output_path.as_str(), fb);
     pb.finish_with_message("Render complete");
 
     Ok(())
