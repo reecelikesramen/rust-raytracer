@@ -3,6 +3,7 @@ use crate::scene::Scene;
 use crate::shader::Hit;
 use crate::Framebuffer;
 use crate::{color, prelude::*};
+use rayon::prelude::*;
 
 pub fn render(
     scene: &Scene,
@@ -33,21 +34,24 @@ pub fn render_mut(
     let width = scene.image_width;
     let height = scene.image_height;
 
-    for i in 0..width {
-        for j in 0..height {
-            render_pixel(
-                fb,
-                scene,
-                sqrt_rays_per_pixel,
-                antialias_method,
-                i,
-                j,
-                per_pixel_cb,
-                wasm_log,
-            )
-            // wasm_log(&format!("On pixel {} {}", i, j));
-        }
-    }
+    // Create iterator of all pixel coordinates
+    let pixels: Vec<(u32, u32)> = (0..width)
+        .flat_map(|i| (0..height).map(move |j| (i, j)))
+        .collect();
+
+    // Process pixels in parallel
+    pixels.par_iter().for_each(|(i, j)| {
+        render_pixel(
+            fb,
+            scene,
+            sqrt_rays_per_pixel,
+            antialias_method,
+            *i,
+            *j,
+            per_pixel_cb,
+            wasm_log,
+        );
+    });
 }
 
 pub fn render_pixel(
