@@ -4,13 +4,19 @@ use rand::Rng;
 use crate::prelude::*;
 
 pub fn random_unit_v3(rng: &mut rand::rngs::ThreadRng) -> V3 {
-    let random = V3::new(
-        rng.gen_range(-1.0..1.0),
-        rng.gen_range(-1.0..1.0),
-        rng.gen_range(-1.0..1.0),
-    );
+    loop {
+        let random = V3::new(
+            rng.gen_range(-1.0..1.0),
+            rng.gen_range(-1.0..1.0),
+            rng.gen_range(-1.0..1.0),
+        );
 
-    random.normalize()
+        let magnitude_squared = random.magnitude_squared();
+
+        if magnitude_squared <= 1.0 && magnitude_squared > VERY_SMALL_NUMBER {
+            return random.normalize();
+        }
+    }
 }
 
 pub fn reflect(vec: &V3, normal: &Unit<V3>) -> V3 {

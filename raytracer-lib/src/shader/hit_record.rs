@@ -18,7 +18,7 @@ impl<'hit> Hit<'hit> {
     pub fn new(ray: Ray, scene: &'hit Scene) -> Self {
         Self {
             t: INFINITY,
-            t_min: 1.0,
+            t_min: 0.001,
             depth: 0,
             ray,
             normal: Unit::new_unchecked(V3::default()),
