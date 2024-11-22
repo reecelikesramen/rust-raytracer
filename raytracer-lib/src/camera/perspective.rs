@@ -22,13 +22,16 @@ impl PerspectiveCamera {
         focus_distance: Real,
         defocus_angle: Real,
     ) -> Self {
-        let image_plane_height = 2. * (field_of_view / 2.).to_radians().tan() * focus_distance;
-        let image_plane_width = image_plane_height * aspect_ratio;
+        // Calculate the viewport dimensions at the focus distance
+        let h = (field_of_view / 2.).to_radians().tan();
+        let viewport_height = 2.0 * h * focus_distance;
+        let viewport_width = viewport_height * aspect_ratio;
+
         let base = CameraBase::new(
             position,
             view_direction,
-            image_plane_width,
-            image_plane_height,
+            viewport_width,
+            viewport_height,
         );
 
         let defocus_radius = focus_distance * (defocus_angle / 2.).to_radians().tan();
@@ -70,16 +73,22 @@ impl PerspectiveCamera {
 impl Camera for PerspectiveCamera {
     fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray {
         let (u, v) = self.base.get_uv(i, j, di, dj);
-        let focus_point = self.base.basis.position + self.base.basis.u * u + self.base.basis.v * v
-            - self.base.basis.w * self.focus_distance;
-
-        let origin = if self.defocus_angle > 0.0 {
-            self.defocus_disk_sample()
-        } else {
+        
+        // Calculate the point on the viewport
+        let viewport_point = self.base.basis.u * u + self.base.basis.v * v;
+        
+        // Get ray origin (either camera center or point on lens)
+        let origin = if self.defocus_angle <= 0.0 {
             self.base.basis.position
+        } else {
+            self.defocus_disk_sample()
         };
 
-        let direction = (focus_point - origin).normalize();
+        // Calculate the target point at the focus distance
+        let target = self.base.basis.position + viewport_point - self.base.basis.w * self.focus_distance;
+        
+        // Direction is from origin through target
+        let direction = (target - origin).normalize();
 
         Ray { origin, direction }
     }
