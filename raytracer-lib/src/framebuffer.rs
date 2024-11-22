@@ -1,10 +1,10 @@
 use crate::{color, prelude::*};
+use parking_lot::RwLock;
 
-#[derive(Clone)]
 pub struct Framebuffer {
-    pub width: u32,
-    pub height: u32,
-    pub pixels: Vec<[f32; 3]>,
+    width: u32,
+    height: u32,
+    pixels: RwLock<Vec<[f32; 3]>>,
 }
 
 impl Framebuffer {
@@ -13,7 +13,7 @@ impl Framebuffer {
         Self {
             width,
             height,
-            pixels: vec![[0.0, 0.0, 0.0]; (width * height) as usize],
+            pixels: RwLock::new(vec![[0.0, 0.0, 0.0]; (width * height) as usize]),
         }
     }
 
@@ -22,30 +22,43 @@ impl Framebuffer {
         (i + j * self.width) as usize
     }
 
-    // set pixel
-    pub fn set_pixel(&mut self, i: u32, j: u32, color: Color) {
+    // set pixel - now thread safe
+    pub fn set_pixel(&self, i: u32, j: u32, color: Color) {
         let idx = self.index(i, j);
-        self.pixels[idx][0] = color[0];
-        self.pixels[idx][1] = color[1];
-        self.pixels[idx][2] = color[2];
+        let mut pixels = self.pixels.write();
+        pixels[idx][0] = color[0];
+        pixels[idx][1] = color[1];
+        pixels[idx][2] = color[2];
     }
 
-    // get pixel
+    // get pixel - now thread safe
     pub fn get_pixel(&self, i: u32, j: u32) -> Color {
         let idx = self.index(i, j);
+        let pixels = self.pixels.read();
         color!(
-            self.pixels[idx][0],
-            self.pixels[idx][1],
-            self.pixels[idx][2]
+            pixels[idx][0],
+            pixels[idx][1],
+            pixels[idx][2]
         )
     }
 
-    // clear color
-    pub fn clear_color(&mut self, color: Color) {
-        for pixel in self.pixels.iter_mut() {
+    // clear color - now thread safe
+    pub fn clear_color(&self, color: Color) {
+        let mut pixels = self.pixels.write();
+        for pixel in pixels.iter_mut() {
             pixel[0] = color[0];
             pixel[1] = color[1];
             pixel[2] = color[2];
         }
+    }
+
+    // Get dimensions
+    pub fn dimensions(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
+    // Get raw pixels for final output
+    pub fn into_raw(self) -> Vec<[f32; 3]> {
+        self.pixels.into_inner()
     }
 }
