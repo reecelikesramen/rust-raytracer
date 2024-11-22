@@ -1,7 +1,7 @@
 mod parse_vec3;
 
 use na::{Rotation3, Scale3, Translation3};
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Serialize};
 
 use crate::{
     camera::*,
@@ -93,8 +93,6 @@ struct CameraData {
     name: String,
     #[serde(flatten)]
     camera_type: CameraType,
-    #[serde(alias = "imagePlaneWidth", default)]
-    image_plane_width: Option<Real>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -107,12 +105,33 @@ enum CameraType {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(untagged)]
+enum PerspectiveCameraType {
+    Old(OldPerspectiveCameraData),
+    New(NewPerspectiveCameraData),
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct OldPerspectiveCameraData {
+    #[serde(alias = "focalLength")]
+    focal_length: Real,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct NewPerspectiveCameraData {
+    #[serde(alias = "vfov")]
+    vertical_fov: Real,
+    focus_distance: Option<Real>,
+    defocus_angle: Option<Real>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 struct PerspectiveCameraData {
     position: W<V3>,
     #[serde(flatten)]
     orientation: CameraOrientation,
-    #[serde(alias = "focalLength")]
-    focal_length: Real,
+    #[serde(flatten)]
+    camera_type: PerspectiveCameraType,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -466,12 +485,29 @@ pub fn parse_scene(
     {
         CameraType::Perspective(perspective) => {
             let position = P3::from(perspective.position.0);
-            Box::new(PerspectiveCamera::new(
-                position,
-                &perspective.orientation.get_view_direction(position),
-                aspect_ratio,
-                perspective.focal_length,
-            ))
+            let view_direction = perspective.orientation.get_view_direction(position);
+
+            Box::new(match &perspective.camera_type {
+                PerspectiveCameraType::Old(old) => PerspectiveCamera::old(
+                    position,
+                    &view_direction,
+                    aspect_ratio,
+                    old.focal_length,
+                ),
+                PerspectiveCameraType::New(new) => {
+                    let defocus_angle = new.defocus_angle.unwrap_or(0.0);
+                    let focus_distance = new.focus_distance.unwrap_or(1.0);
+
+                    PerspectiveCamera::new(
+                        position,
+                        &view_direction,
+                        aspect_ratio,
+                        new.vertical_fov,
+                        focus_distance,
+                        defocus_angle,
+                    )
+                }
+            })
         }
         CameraType::Orthographic(orthographic) => {
             let position = P3::from(orthographic.position.0);

@@ -29,7 +29,7 @@
           "kind": "bin"
         }
       },
-      "args": ["-r1", "-x200", "-y200", "--recursion-depth", "4", "-i${workspaceFolder}/scenes/scenes/${input:scene_name}.json"],
+      "args": ["-r1", "-x360", "-y240", "--recursion-depth", "4", "-i${workspaceFolder}/scenes/scenes/${input:scene_name}.json"],
       "cwd": "${workspaceFolder}"
     },
     {

@@ -34,10 +34,12 @@ pub struct CameraBase {
 }
 
 impl CameraBase {
-    pub fn new(position: P3, view_direction: &V3, aspect_ratio: Real) -> Self {
-        let image_plane_width = DEFAULT_IMAGE_PLANE_WIDTH;
-        let image_plane_height = image_plane_width / aspect_ratio;
-
+    pub fn new(
+        position: P3,
+        view_direction: &V3,
+        image_plane_width: Real,
+        image_plane_height: Real,
+    ) -> Self {
         Self {
             basis: CoordinateSystem::new(position, view_direction),
             pixels_x: 0,

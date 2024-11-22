@@ -10,7 +10,7 @@ pub fn render(
     antialias_method: AntialiasMethod,
     per_pixel_cb: Option<&dyn Fn() -> ()>,
 ) -> Framebuffer {
-    let mut fb = Framebuffer::new(scene.image_width, scene.image_width);
+    let mut fb = Framebuffer::new(scene.image_width, scene.image_height);
     render_mut(
         &mut fb,
         scene,
@@ -65,7 +65,7 @@ pub fn render_pixel(
         for q in 0..sqrt_rays_per_pixel {
             let (di, dj) = antialias(antialias_method, sqrt_rays_per_pixel, p, q);
             let ray = scene.camera.generate_ray(i, j, di, dj);
-            let mut hit = Hit::new(ray, &scene);
+            let hit = Hit::new(ray, &scene);
 
             color += ray_color(&scene, hit);
         }

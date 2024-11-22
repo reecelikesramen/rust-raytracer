@@ -9,8 +9,15 @@ pub struct OrthographicCamera {
 
 impl OrthographicCamera {
     pub fn new(position: P3, view_direction: &V3, aspect_ratio: Real) -> Self {
+        let image_plane_width = DEFAULT_IMAGE_PLANE_WIDTH;
+        let image_plane_height = image_plane_width / aspect_ratio;
         Self {
-            base: CameraBase::new(position, view_direction, aspect_ratio),
+            base: CameraBase::new(
+                position,
+                view_direction,
+                image_plane_width,
+                image_plane_height,
+            ),
         }
     }
 }
