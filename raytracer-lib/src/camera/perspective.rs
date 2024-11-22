@@ -34,15 +34,9 @@ impl PerspectiveCamera {
         let defocus_radius = focus_distance * (defocus_angle / 2.).to_radians().tan();
         let defocus_disk_u = base.basis.u * defocus_radius;
         let defocus_disk_v = base.basis.v * defocus_radius;
-        println!("Defocus disk: u={defocus_disk_u}, v={defocus_disk_v} radius={defocus_radius}");
 
         Self {
-            base: CameraBase::new(
-                position,
-                view_direction,
-                image_plane_width,
-                image_plane_height,
-            ),
+            base,
             defocus_angle,
             focus_distance,
             defocus_disk_u,
@@ -53,12 +47,6 @@ impl PerspectiveCamera {
     pub fn old(position: P3, view_direction: &V3, aspect_ratio: Real, focal_length: Real) -> Self {
         let image_plane_height = 2.;
         let image_plane_width = image_plane_height * aspect_ratio;
-        let base = CameraBase::new(
-            position,
-            view_direction,
-            image_plane_width,
-            image_plane_height,
-        );
         Self {
             base: CameraBase::new(
                 position,
@@ -82,17 +70,18 @@ impl PerspectiveCamera {
 impl Camera for PerspectiveCamera {
     fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray {
         let (u, v) = self.base.get_uv(i, j, di, dj);
-        let direction =
-            self.base.basis.u * u + self.base.basis.v * v - self.base.basis.w * self.focus_distance;
+        let focus_point = self.base.basis.position + self.base.basis.u * u + self.base.basis.v * v
+            - self.base.basis.w * self.focus_distance;
+
         let origin = if self.defocus_angle > 0.0 {
             self.defocus_disk_sample()
         } else {
             self.base.basis.position
         };
-        Ray {
-            origin,
-            direction: direction,
-        }
+
+        let direction = (focus_point - origin).normalize();
+
+        Ray { origin, direction }
     }
 
     fn camera_base(&self) -> &CameraBase {
