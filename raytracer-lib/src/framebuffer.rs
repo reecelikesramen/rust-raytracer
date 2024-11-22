@@ -61,4 +61,14 @@ impl Framebuffer {
     pub fn into_raw(self) -> Vec<[f32; 3]> {
         self.pixels.into_inner()
     }
+
+    // Create framebuffer from raw pixels
+    pub fn from_raw(width: u32, height: u32, pixels: Vec<[f32; 3]>) -> Self {
+        assert_eq!(pixels.len(), (width * height) as usize);
+        Self {
+            width,
+            height,
+            pixels: RwLock::new(pixels),
+        }
+    }
 }
