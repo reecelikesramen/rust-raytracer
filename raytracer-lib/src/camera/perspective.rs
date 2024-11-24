@@ -27,12 +27,7 @@ impl PerspectiveCamera {
         let viewport_height = 2.0 * h * focus_distance;
         let viewport_width = viewport_height * aspect_ratio;
 
-        let base = CameraBase::new(
-            position,
-            view_direction,
-            viewport_width,
-            viewport_height,
-        );
+        let base = CameraBase::new(position, view_direction, viewport_width, viewport_height);
 
         let defocus_radius = focus_distance * (defocus_angle / 2.).to_radians().tan();
         let defocus_disk_u = base.basis.u * defocus_radius;
@@ -73,10 +68,10 @@ impl PerspectiveCamera {
 impl Camera for PerspectiveCamera {
     fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray {
         let (u, v) = self.base.get_uv(i, j, di, dj);
-        
+
         // Calculate the point on the viewport
         let viewport_point = self.base.basis.u * u + self.base.basis.v * v;
-        
+
         // Get ray origin (either camera center or point on lens)
         let origin = if self.defocus_angle <= 0.0 {
             self.base.basis.position
@@ -85,10 +80,11 @@ impl Camera for PerspectiveCamera {
         };
 
         // Calculate the target point at the focus distance
-        let target = self.base.basis.position + viewport_point - self.base.basis.w * self.focus_distance;
-        
+        let target =
+            self.base.basis.position + viewport_point - self.base.basis.w * self.focus_distance;
+
         // Direction is from origin through target
-        let direction = (target - origin).normalize();
+        let direction = target - origin;
 
         Ray { origin, direction }
     }
@@ -103,7 +99,7 @@ impl Camera for PerspectiveCamera {
 
 fn random_in_unit_disk(rand: &mut rand::rngs::ThreadRng) -> (Real, Real) {
     loop {
-        let p = Vector2::new(rand.gen::<Real>(), rand.gen::<Real>());
+        let p = Vector2::new(rand.gen_range(-1.0..1.0), rand.gen_range(-1.0..1.0));
         if p.magnitude_squared() < 1.0 {
             return (p.x, p.y);
         }

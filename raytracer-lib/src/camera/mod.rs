@@ -8,7 +8,7 @@ mod perspective;
 pub use self::orthographic::OrthographicCamera;
 pub use self::perspective::PerspectiveCamera;
 
-pub trait Camera: std::fmt::Debug {
+pub trait Camera: std::fmt::Debug + Sync {
     fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray;
 
     // Default implementation that all cameras can use
