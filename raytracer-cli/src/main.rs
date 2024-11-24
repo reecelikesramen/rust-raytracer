@@ -1,13 +1,11 @@
 mod output;
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use output::save;
 
-extern crate clap;
-extern crate indicatif;
-extern crate raytracer_lib;
 use clap::{Parser, ValueEnum};
-use raytracer_lib::{parse_scene, public_consts, render};
+use rayon::prelude::*;
+use raytracer_lib::{parse_scene, public_consts, render_pixel, Framebuffer};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum AntialiasMethod {
@@ -82,24 +80,113 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )));
     }
 
-    let pb = indicatif::ProgressBar::new((scene.image_width * scene.image_height) as u64);
-
+    let width = scene.image_width;
+    let height = scene.image_height;
+    let pb = indicatif::ProgressBar::new((width * height) as u64);
     pb.set_style(indicatif::ProgressStyle::default_bar().template("{wide_bar} {percent}% ")?);
 
-    let per_pixel_cb = || {
-        pb.inc(1);
-    };
-
-    let aa_method = match args.antialias_method {
+    let antialias_method = match args.antialias_method {
         Some(AntialiasMethod::Normal) => raytracer_lib::AntialiasMethod::Normal,
         Some(AntialiasMethod::Jittered) => raytracer_lib::AntialiasMethod::Jittered,
         Some(AntialiasMethod::Random) => raytracer_lib::AntialiasMethod::Random,
         None => raytracer_lib::AntialiasMethod::Normal,
     };
 
-    let fb = render(&scene, sqrt_rays_per_pixel, aa_method, Some(&per_pixel_cb));
-    save(args.output_path.as_str(), fb);
+    let framebuffer = Arc::new(Framebuffer::new(width, height));
+
+    // # Column-chunk parallel version 37 seconds
+    (0..width).into_par_iter().for_each(|i| {
+        for j in 0..height {
+            render_pixel(
+                framebuffer.clone(),
+                &scene,
+                sqrt_rays_per_pixel,
+                antialias_method,
+                i,
+                j,
+            );
+            pb.inc(1);
+        }
+    });
+
+    let framebuffer = match Arc::try_unwrap(framebuffer) {
+        Ok(fb) => fb,
+        Err(_) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "failed to unwrap framebuffer after render",
+            )))
+        }
+    };
+
+    save(args.output_path.as_str(), framebuffer);
     pb.finish_with_message("Render complete");
 
     Ok(())
+}
+
+pub fn split_image_into_grid(width: u32, height: u32, grid_size: u32) -> Vec<Vec<(u32, u32)>> {
+    let mut grid_cells = Vec::new();
+
+    let complete_cols = width / grid_size;
+    let complete_rows = height / grid_size;
+    let remainder_width = width % grid_size;
+    let remainder_height = height % grid_size;
+
+    // Pre-calculate capacity to avoid reallocations
+    let total_cells = (complete_cols + (remainder_width > 0) as u32)
+        * (complete_rows + (remainder_height > 0) as u32);
+    grid_cells.reserve_exact(total_cells as usize);
+
+    // Process complete grid cells
+    for row in 0..complete_rows {
+        for col in 0..complete_cols {
+            let mut cell = Vec::with_capacity((grid_size * grid_size) as usize);
+            for i in 0..grid_size {
+                for j in 0..grid_size {
+                    cell.push((col * grid_size + j, row * grid_size + i));
+                }
+            }
+            grid_cells.push(cell);
+        }
+    }
+
+    // Process right edge
+    if remainder_width > 0 {
+        for row in 0..complete_rows {
+            let mut cell = Vec::with_capacity((grid_size * remainder_width) as usize);
+            for i in 0..grid_size {
+                for j in 0..remainder_width {
+                    cell.push((complete_cols * grid_size + j, row * grid_size + i));
+                }
+            }
+            grid_cells.push(cell);
+        }
+    }
+
+    // Process bottom edge
+    if remainder_height > 0 {
+        for col in 0..complete_cols {
+            let mut cell = Vec::with_capacity((remainder_height * grid_size) as usize);
+            for i in 0..remainder_height {
+                for j in 0..grid_size {
+                    cell.push((col * grid_size + j, complete_rows * grid_size + i));
+                }
+            }
+            grid_cells.push(cell);
+        }
+    }
+
+    // Process bottom-right corner
+    if remainder_width > 0 && remainder_height > 0 {
+        let mut cell = Vec::with_capacity((remainder_height * remainder_width) as usize);
+        for i in 0..remainder_height {
+            for j in 0..remainder_width {
+                cell.push((complete_cols * grid_size + j, complete_rows * grid_size + i));
+            }
+        }
+        grid_cells.push(cell);
+    }
+
+    grid_cells
 }

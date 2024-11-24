@@ -1,7 +1,7 @@
 mod parse_vec3;
 
 use na::{Rotation3, Scale3, Translation3};
-use serde::{de, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     camera::*,
