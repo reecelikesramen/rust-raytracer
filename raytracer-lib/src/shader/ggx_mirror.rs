@@ -1,7 +1,7 @@
 use crate::{color, math::create_coordinate_system, prelude::*};
 use rand::Rng;
 
-use super::{Hit, Shader};
+use super::{HitRecord, Shader};
 
 #[derive(Debug)]
 pub struct GGXMirrorShader {
@@ -44,46 +44,34 @@ impl GGXMirrorShader {
 }
 
 impl Shader for GGXMirrorShader {
-    fn apply(&self, hit: &Hit) -> Color {
-        if hit.depth >= hit.scene.recursion_depth {
-            return hit.scene.background_color;
-        }
+    fn apply(&self, hit: &HitRecord) -> Color {
+        panic!("reworking");
+        // if hit.depth >= hit.scene.recursion_depth {
+        //     return hit.scene.background_color;
+        // }
 
-        let mut rng = rand::thread_rng();
-        let incoming = hit.ray.direction.normalize();
-        let mut accumulated_color = color!(0.0, 0.0, 0.0);
+        // let mut rng = rand::thread_rng();
+        // let incoming = hit.ray.direction.normalize();
+        // let mut accumulated_color = color!(0.0, 0.0, 0.0);
 
-        // Sample microfacet normal using GGX distribution
-        // let micro_normal = self.sample_ggx(&hit.normal, &mut rng);
+        // // Sample microfacet normal using GGX distribution
+        // // let micro_normal = self.sample_ggx(&hit.normal, &mut rng);
 
-        // Calculate reflected direction using the sampled microfacet normal
-        // let outgoing = incoming - micro_normal * (2.0 * incoming.dot(&micro_normal));
+        // // Calculate reflected direction using the sampled microfacet normal
+        // // let outgoing = incoming - micro_normal * (2.0 * incoming.dot(&micro_normal));
 
-        // Take self.samples samples of the micro normal and calculate the outgoing vector
-        let mut outgoing_samples = (0..self.samples)
-            .map(|_| self.sample_ggx(&hit.normal, &mut rng))
-            .map(|micro_normal| incoming - micro_normal * (2.0 * incoming.dot(&micro_normal)))
-            .collect::<Vec<V3>>();
+        // // Take self.samples samples of the micro normal and calculate the outgoing vector
+        // let mut outgoing_samples = (0..self.samples)
+        //     .map(|_| self.sample_ggx(&hit.normal, &mut rng))
+        //     .map(|micro_normal| incoming - micro_normal * (2.0 * incoming.dot(&micro_normal)))
+        //     .collect::<Vec<V3>>();
 
-        // sort this by the outgoing vector dot product with the hit normal
-        outgoing_samples.sort_by(|a, b| a.dot(&hit.normal).total_cmp(&b.dot(&hit.normal)));
+        // // sort this by the outgoing vector dot product with the hit normal
+        // outgoing_samples.sort_by(|a, b| a.dot(&hit.normal).total_cmp(&b.dot(&hit.normal)));
 
-        for outgoing in outgoing_samples {
-            let mut mirror_hit = hit.bounce(crate::math::Ray {
-                origin: hit.hit_point(),
-                direction: outgoing.normalize(),
-            });
-
-            // Get color for this sample
-            hit.scene.bvh.closest_hit(&mut mirror_hit);
-
-            accumulated_color += mirror_hit.hit_color();
-        }
-
-        // Multi-sample the roughness
-        // for _ in 0..self.samples {
+        // for outgoing in outgoing_samples {
         //     let mut mirror_hit = hit.bounce(crate::math::Ray {
-        //         origin: hit.hit_point(),
+        //         origin: hit.point(),
         //         direction: outgoing.normalize(),
         //     });
 
@@ -93,7 +81,20 @@ impl Shader for GGXMirrorShader {
         //     accumulated_color += mirror_hit.hit_color();
         // }
 
-        // Average the samples
-        accumulated_color / self.samples as f32
+        // // Multi-sample the roughness
+        // // for _ in 0..self.samples {
+        // //     let mut mirror_hit = hit.bounce(crate::math::Ray {
+        // //         origin: hit.hit_point(),
+        // //         direction: outgoing.normalize(),
+        // //     });
+
+        // //     // Get color for this sample
+        // //     hit.scene.bvh.closest_hit(&mut mirror_hit);
+
+        // //     accumulated_color += mirror_hit.hit_color();
+        // // }
+
+        // // Average the samples
+        // accumulated_color / self.samples as f32
     }
 }

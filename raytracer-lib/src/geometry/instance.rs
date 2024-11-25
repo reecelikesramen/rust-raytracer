@@ -2,10 +2,6 @@ use super::*;
 
 use na::{Matrix4, Rotation3, Scale3, Translation3, Unit};
 
-use crate::shader::Shader;
-
-use super::{bbox::BBox, Real, Shape, ShapeType};
-
 #[derive(Debug)]
 pub struct Instance {
     shape: Arc<dyn Shape>,
@@ -54,14 +50,6 @@ impl Instance {
 }
 
 impl Shape for Instance {
-    fn get_type(&self) -> ShapeType {
-        ShapeType::Instance
-    }
-
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
     fn get_bbox(&self) -> &BBox {
         &self.bbox
     }
@@ -70,31 +58,33 @@ impl Shape for Instance {
         self.bbox.centroid
     }
 
-    fn get_shader(&self) -> Arc<dyn Shader> {
-        self.shader.clone()
-    }
-
-    fn get_material(&self) -> Arc<dyn Material> {
-        self.material.clone()
-    }
-
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
-        let og_ray = hit.ray;
+    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+        let og_ray = hit_record.ray;
         let transformed_ray = crate::math::Ray {
             origin: self.inv_transform.transform_point(&og_ray.origin),
             direction: self.inv_transform.transform_vector(&og_ray.direction),
         };
-        hit.ray = transformed_ray;
+        hit_record.ray = transformed_ray;
 
-        let did_hit = self.shape.closest_hit(hit);
-        hit.ray = og_ray; // reset the ray
+        let did_hit = self.shape.closest_hit(hit_record);
+
+        // Reset the ray to the non-transformed ray
+        hit_record.ray = og_ray;
+
+        // Return false if no intersection
         if !did_hit {
             return false;
         }
 
-        let normal = self.normal_matrix.transform_vector(&hit.normal);
-        hit.set_normal(Unit::new_normalize(normal));
-        hit.shape = Some(self);
+        // Take the hit data and transform it to world space
+        let hit_data = hit_record
+            .hit_data
+            .take()
+            .expect("Hit record should have hit data");
+        let normal = Unit::new_normalize(self.normal_matrix.transform_vector(&hit_data.normal));
+
+        // Reset the hit data
+        hit_record.set_hit_data(normal, hit_data.uv, self.material.clone());
 
         true
     }
