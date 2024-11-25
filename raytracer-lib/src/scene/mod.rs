@@ -1,21 +1,24 @@
 mod parse_vec3;
 
+use image::Rgb32FImage;
 use na::{Rotation3, Scale3, Translation3};
 use serde::{Deserialize, Serialize};
+use tobj::load_obj_buf;
 
 use crate::{
     camera::*,
     color,
     geometry::*,
     light::*,
-    material::{Dielectric, Diffuse, Lambertian, Material, Metal},
+    material::{Dielectric, Diffuse, Lambertian, Material, Metal, DEFAULT_MATERIAL},
     prelude::*,
     shader::*,
+    texture::{CheckeredTexture, ImageTexture, SolidColor, Texture},
     V3,
 };
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    io::BufReader,
     sync::Arc,
 };
 
@@ -25,7 +28,6 @@ pub struct Scene {
     pub background_color: Color,
     pub camera: Box<dyn crate::camera::Camera>,
     pub shapes: Vec<Arc<dyn crate::geometry::Shape>>,
-    pub shaders: std::collections::HashMap<String, Arc<dyn crate::shader::Shader>>,
     pub lights: Vec<Box<dyn crate::light::Light>>,
     pub bvh: crate::geometry::BVH,
     pub recursion_depth: u16,
@@ -340,6 +342,7 @@ enum ShapeType {
     Sphere(SphereData),
     Box(BoxData),
     Triangle(TriangleData),
+    Quad(QuadData),
     Mesh(MeshData),
     Instance(InstanceData),
 }
@@ -373,6 +376,13 @@ struct TriangleData {
     b: W<V3>,
     #[serde(alias = "v2")]
     c: W<V3>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct QuadData {
+    q: W<V3>,
+    u: W<V3>,
+    v: W<V3>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -425,15 +435,33 @@ struct TextureData {
     name: String,
 }
 
+pub type FetchDataFn = dyn Fn(&str) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+
+fn to_texture(
+    material_property: &MaterialProperty,
+    texture_map: &HashMap<String, Arc<Rgb32FImage>>,
+) -> Result<Arc<dyn Texture>, Box<dyn std::error::Error>> {
+    match material_property {
+        MaterialProperty::Color(color) => Ok(Arc::new(SolidColor::new(color.0))),
+        MaterialProperty::Texture { texture, tint } => match texture_map.get(texture) {
+            Some(data) => Ok(Arc::new(ImageTexture::new(data.clone(), tint.0))),
+            None => Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "shape references non-existent material",
+            ))),
+        },
+    }
+}
+
 pub fn parse_scene(
     scene_json: &str,
-    scene_data_path: &str,
     image_width: Option<u32>,
     image_height: Option<u32>,
     aspect_ratio: Option<Real>,
     recursion_depth: Option<u16>,
     disable_shadows: bool,
     render_normals: bool,
+    fetch_data: &FetchDataFn,
 ) -> Result<Scene, Box<dyn std::error::Error>> {
     let scene_file: SceneModel = serde_json::from_str(scene_json)?;
     let scene = scene_file.scene;
@@ -523,48 +551,12 @@ pub fn parse_scene(
     // Set image size
     camera.set_image_pixels(image_width, image_height);
 
-    // Create shaders
-    let mut shaders: HashMap<String, Arc<dyn Shader>> = HashMap::new();
-    for shader in scene.shaders.iter() {
-        let shader_name = shader.name.clone();
-        let shader: Arc<dyn Shader> = match &shader.shader {
-            ShaderType::Lambertian(lambertian) => {
-                let diffuse = match &lambertian.diffuse {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-                Arc::new(LambertianShader::new(diffuse, lambertian.samples))
-            }
-            ShaderType::BlinnPhong(blinn_phong) => {
-                let diffuse = match &blinn_phong.diffuse {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-                let specular = match &blinn_phong.specular {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-
-                Arc::new(BlinnPhongShader::new(
-                    diffuse,
-                    specular,
-                    blinn_phong.shininess,
-                ))
-            }
-            ShaderType::PerfectMirror => Arc::new(PerfectMirrorShader::default()),
-            ShaderType::GGXMirror(mirror) => {
-                Arc::new(GGXMirrorShader::new(mirror.roughness, mirror.samples))
-            }
-            ShaderType::Diffuse(diffuse) => {
-                let albedo = match &diffuse.diffuse {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-                Arc::new(DiffuseShader::new(albedo, diffuse.samples))
-            }
-            _ => Arc::new(NullShader::default()),
-        };
-        shaders.insert(shader_name, shader);
+    // Create textures
+    let mut textures: HashMap<String, Arc<Rgb32FImage>> = HashMap::new();
+    for texture_data in scene.textures.iter() {
+        let image_buffer = fetch_data(&texture_data.image_path)?;
+        let image: Arc<Rgb32FImage> = Arc::new(image::load_from_memory(&image_buffer)?.to_rgb32f());
+        textures.insert(texture_data.name.clone(), image);
     }
 
     // Create materials
@@ -573,36 +565,23 @@ pub fn parse_scene(
         let material_name = shader.name.clone();
         let material: Arc<dyn Material> = match &shader.shader {
             ShaderType::Lambertian(lambertian) => {
-                let albedo = match &lambertian.diffuse {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-
+                let albedo = to_texture(&lambertian.diffuse, &textures)?;
                 Arc::new(Lambertian::new(albedo))
             }
             ShaderType::Diffuse(diffuse) => {
-                let albedo = match &diffuse.diffuse {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-
+                let albedo = to_texture(&diffuse.diffuse, &textures)?;
                 Arc::new(Diffuse::new(albedo))
             }
             ShaderType::Metal(metal) => {
-                let albedo = match &metal.albedo {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
+                let albedo = to_texture(&metal.albedo, &textures)?;
                 Arc::new(Metal::new(albedo, metal.fuzz))
             }
             ShaderType::Dielectric(dielectric) => {
-                let attenuation = match &dielectric.attenuation {
-                    MaterialProperty::Color(color) => color.0,
-                    _ => unimplemented!("texture for material property not implemented yet"),
-                };
-                Arc::new(Dielectric::new(attenuation, dielectric.refractive_index))
+                let attenutation = to_texture(&dielectric.attenuation, &textures)?;
+                Arc::new(Dielectric::new(attenutation, dielectric.refractive_index))
             }
-            _ => Arc::new(Lambertian::new(color!(1.0, 0.0, 1.0))),
+            _ => Arc::new(Lambertian::new(Arc::new(CheckeredTexture::default()))),
+            // _ => todo!("other materials not implemented yet"),
         };
         materials.insert(material_name, material);
     }
@@ -612,7 +591,7 @@ pub fn parse_scene(
     for shape in scene.instances.iter() {
         let instance_name = Box::leak(shape.name.clone().into_boxed_str());
         let shader = Arc::new(NullShader::default());
-        let material = Arc::new(Lambertian::new(color!(0.0, 0.0, 0.0)));
+        let material = DEFAULT_MATERIAL.clone();
         let shape: Arc<dyn Shape> = match &shape.shape {
             ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
                 P3::from(sphere.center.0),
@@ -644,27 +623,46 @@ pub fn parse_scene(
                 P3::from(triangle.a.0),
                 P3::from(triangle.b.0),
                 P3::from(triangle.c.0),
-                shader,
+                material,
+                instance_name,
+            )),
+            ShapeType::Quad(quad) => Arc::new(Quad::new(
+                P3::from(quad.q.0),
+                quad.u.0,
+                quad.v.0,
                 material,
                 instance_name,
             )),
             ShapeType::Mesh(mesh) => {
-                // TODO: this should be done differently
-                let model_path = String::from(
-                    Path::new(&scene_data_path)
-                        .join(&mesh.model_path)
-                        .to_str()
-                        .expect("failed to convert model path to string"),
-                );
-                Arc::new(Mesh::new(model_path, shader, material, instance_name))
+                let model_buffer = fetch_data(&mesh.model_path)?;
+                let mut reader = BufReader::new(model_buffer.as_slice());
+
+                let (models, _) = load_obj_buf(
+                    &mut reader,
+                    &tobj::LoadOptions {
+                        triangulate: true,
+                        ..Default::default()
+                    },
+                    |_mat_path| unimplemented!("material loading not implemented yet"),
+                )
+                .expect("Failed to load model for mesh");
+
+                if models.len() != 1 {
+                    panic!(
+                        "expected exactly one model, found {} for mesh {}",
+                        models.len(),
+                        mesh.model_path
+                    );
+                }
+
+                // take ownership of the model from the Vec
+                let model = models.into_iter().next().unwrap();
+                Arc::new(Mesh::new(model, material, instance_name))
             }
             ShapeType::Instance(_) => panic!("An instanced shape can not be type instance"),
         };
         instances.insert(instance_name.to_string(), shape);
     }
-
-    // normal shader
-    let normal_shader = Arc::new(NormalShader::default());
 
     // create a set of names for the shapes to that names are unique
     let mut shape_names: HashSet<&str> = HashSet::new();
@@ -672,20 +670,7 @@ pub fn parse_scene(
     // Create shapes
     let mut shapes: Vec<Arc<dyn Shape>> = Vec::new();
     for shape in scene.shapes.iter() {
-        // extract shader, or just use normal shader
-        let shader = if !render_normals {
-            match shaders.get(shape.shader.name()) {
-                Some(s) => Arc::clone(s),
-                None => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::InvalidData,
-                        "shape references non-existent shader",
-                    )))
-                }
-            }
-        } else {
-            Arc::clone(&normal_shader)
-        };
+        let shader = Arc::new(NullShader::default());
 
         // extract material
         let material = match materials.get(shape.shader.name()) {
@@ -736,19 +721,41 @@ pub fn parse_scene(
                 P3::from(triangle.a.0),
                 P3::from(triangle.b.0),
                 P3::from(triangle.c.0),
-                shader,
+                material,
+                shape_name,
+            )),
+            ShapeType::Quad(quad) => Arc::new(Quad::new(
+                P3::from(quad.q.0),
+                quad.u.0,
+                quad.v.0,
                 material,
                 shape_name,
             )),
             ShapeType::Mesh(mesh) => {
-                // TODO: this should be done differently
-                let model_path = String::from(
-                    Path::new(&scene_data_path)
-                        .join(&mesh.model_path)
-                        .to_str()
-                        .expect("failed to convert model path to string"),
-                );
-                Arc::new(Mesh::new(model_path, shader, material, shape_name))
+                let model_buffer = fetch_data(&mesh.model_path)?;
+                let mut reader = BufReader::new(model_buffer.as_slice());
+
+                let (models, _) = load_obj_buf(
+                    &mut reader,
+                    &tobj::LoadOptions {
+                        triangulate: true,
+                        ..Default::default()
+                    },
+                    |_mat_path| unimplemented!("material loading not implemented yet"),
+                )
+                .expect("Failed to load model for mesh");
+
+                if models.len() != 1 {
+                    panic!(
+                        "expected exactly one model, found {} for mesh {}",
+                        models.len(),
+                        mesh.model_path
+                    );
+                }
+
+                // take ownership of the model from the Vec
+                let model = models.into_iter().next().unwrap();
+                Arc::new(Mesh::new(model, material, shape_name))
             }
             ShapeType::Instance(instance) => {
                 let shape = instances
@@ -837,7 +844,6 @@ pub fn parse_scene(
         background_color,
         camera,
         shapes,
-        shaders,
         lights,
         bvh,
         recursion_depth: recursion_depth.unwrap_or(DEFAULT_RECURSION_DEPTH),

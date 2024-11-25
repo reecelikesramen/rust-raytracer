@@ -4,7 +4,7 @@ use crate::prelude::*;
 pub struct NullShader;
 
 impl super::Shader for NullShader {
-    fn apply(&self, _hit: &super::Hit) -> Color {
+    fn apply(&self, _hit: &super::HitRecord) -> Color {
         ERROR_COLOR
     }
 }

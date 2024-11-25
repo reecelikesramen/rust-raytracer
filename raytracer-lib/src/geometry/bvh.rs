@@ -1,4 +1,7 @@
-use crate::geometry::Shape;
+use crate::{
+    geometry::Shape,
+    hit_record::{HitData, HitRecord},
+};
 use std::sync::Arc;
 
 use super::BBox;
@@ -90,7 +93,7 @@ impl BVHNode {
         &self.bbox
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    pub fn closest_hit<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> bool {
         // First check if ray intersects this node's bounding box
         if self.bbox.hit(&hit.ray, hit.t_min, hit.t).is_none() {
             return false;
@@ -137,8 +140,13 @@ impl BVH {
         }
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    pub fn closest_hit<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> bool {
         self.root.closest_hit(hit)
+    }
+
+    pub fn get_closest_hit_data<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> Option<HitData> {
+        self.closest_hit(hit);
+        hit.hit_data.take()
     }
 
     pub fn get_bbox(&self) -> &BBox {

@@ -7,6 +7,7 @@ mod antialias;
 mod camera;
 mod framebuffer;
 mod geometry;
+mod hit_record;
 mod light;
 mod material;
 mod math;
@@ -14,6 +15,7 @@ mod prelude;
 mod render;
 mod scene;
 mod shader;
+mod texture;
 
 pub use antialias::AntialiasMethod;
 pub use framebuffer::Framebuffer;

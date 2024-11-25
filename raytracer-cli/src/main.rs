@@ -46,22 +46,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{:?}", args);
 
     // read scene path as string
-    let scene_json = std::fs::read_to_string(&args.scene_path)?;
-    let scene_data_path = Path::new(&args.scene_path)
-        .parent()
-        .unwrap()
-        .to_str()
-        .unwrap();
+    let scene_path = Path::new(&args.scene_path);
+    let scene_json = std::fs::read_to_string(&scene_path)?;
+    let scene_root = scene_path.parent().unwrap().to_path_buf();
+
+    let fetch_data = move |path: &str| Ok(std::fs::read(scene_root.join(path))?);
 
     let scene = parse_scene(
         &scene_json,
-        &scene_data_path,
         args.width,
         args.height,
         args.aspect_ratio,
         args.recursion_depth,
         args.disable_shadows,
         args.render_normals,
+        &fetch_data,
     )?;
 
     // #[cfg(debug_assertions)]

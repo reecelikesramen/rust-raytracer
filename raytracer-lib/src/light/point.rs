@@ -1,7 +1,7 @@
+use crate::math::Ray;
 use crate::prelude::*;
-use crate::{math::Ray, shader::Hit};
 
-use super::Light;
+use super::*;
 
 #[derive(Debug)]
 pub struct PointLight {
@@ -27,9 +27,10 @@ impl Light for PointLight {
         self.position
     }
 
-    fn illuminates(&self, hit: &Hit) -> Option<V3> {
-        let surface_to_light = Ray::atob(hit.hit_point(), self.get_position());
-        let mut shadow_hit = Hit::to_light(surface_to_light, &hit.scene);
+    fn illuminates(&self, hit: &HitRecord) -> Option<V3> {
+        panic!("reworking");
+        let surface_to_light = Ray::atob(hit.point(), self.get_position());
+        let mut shadow_hit = HitRecord::to_light(surface_to_light, &hit.scene);
 
         // if shadows are enabled and a shape blocks the light
         if !hit.scene.disable_shadows && hit.scene.bvh.closest_hit(&mut shadow_hit) {

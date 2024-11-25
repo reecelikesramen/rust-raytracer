@@ -19,29 +19,30 @@ impl LambertianShader {
 }
 
 impl Shader for LambertianShader {
-    fn apply(&self, hit: &super::Hit) -> Color {
-        if hit.depth >= hit.scene.recursion_depth {
-            return hit.scene.background_color;
-        }
+    fn apply(&self, hit: &super::HitRecord) -> Color {
+        panic!("reworking");
+        // if hit.depth >= hit.scene.recursion_depth {
+        //     return hit.scene.background_color;
+        // }
 
-        let mut color = color!(0.0, 0.0, 0.0);
+        // let mut color = color!(0.0, 0.0, 0.0);
 
-        // Monte Carlo integration for multi-sampling
-        let mut rng = rand::thread_rng();
-        for _ in 0..self.samples {
-            let outgoing = (random_unit_v3(&mut rng) + hit.normal.into_inner()).normalize();
-            let mut indirect_hit = hit.bounce(Ray {
-                origin: hit.hit_point(),
-                direction: outgoing,
-            });
+        // // Monte Carlo integration for multi-sampling
+        // let mut rng = rand::thread_rng();
+        // for _ in 0..self.samples {
+        //     let outgoing = (random_unit_v3(&mut rng) + hit.normal.into_inner()).normalize();
+        //     let mut indirect_hit = hit.bounce(Ray {
+        //         origin: hit.point(),
+        //         direction: outgoing,
+        //     });
 
-            hit.scene.bvh.closest_hit(&mut indirect_hit);
+        //     hit.scene.bvh.closest_hit(&mut indirect_hit);
 
-            let cos_incidence = hit.normal.dot(&outgoing).max(0.0);
+        //     let cos_incidence = hit.normal.dot(&outgoing).max(0.0);
 
-            color += self.diffuse.component_mul(&indirect_hit.hit_color()) * cos_incidence as f32;
-        }
+        //     color += self.diffuse.component_mul(&indirect_hit.hit_color()) * cos_incidence as f32;
+        // }
 
-        color / self.samples as f32
+        // color / self.samples as f32
     }
 }

@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-use super::Light;
+use super::*;
 
 #[derive(Debug)]
 pub struct AmbientLight {
@@ -22,7 +22,8 @@ impl Light for AmbientLight {
         P3::default()
     }
 
-    fn illuminates(&self, hit: &crate::shader::Hit) -> Option<V3> {
-        Some(hit.normal.into_inner())
+    fn illuminates(&self, hit: &HitRecord) -> Option<V3> {
+        panic!("reworking");
+        // Some(hit.normal.into_inner())
     }
 }

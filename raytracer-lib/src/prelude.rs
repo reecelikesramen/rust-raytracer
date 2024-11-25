@@ -54,9 +54,9 @@ mod constants {
 pub mod public_consts {
     use crate::AntialiasMethod;
 
-    pub static DEFAULT_IMAGE_WIDTH: u32 = 360;
-    pub static DEFAULT_IMAGE_HEIGHT: u32 = 360;
-    pub static DEFAULT_RAYS_PER_PIXEL: u16 = 4;
-    pub static DEFAULT_RECURSION_DEPTH: u16 = 3;
+    pub static DEFAULT_IMAGE_WIDTH: u32 = 500;
+    pub static DEFAULT_IMAGE_HEIGHT: u32 = 500;
+    pub static DEFAULT_RAYS_PER_PIXEL: u16 = 36;
+    pub static DEFAULT_RECURSION_DEPTH: u16 = 10;
     pub static DEFAULT_ANTIALIAS_METHOD: AntialiasMethod = AntialiasMethod::Normal;
 }

@@ -45,14 +45,6 @@ impl Cuboid {
 }
 
 impl Shape for Cuboid {
-    fn get_type(&self) -> super::ShapeType {
-        super::ShapeType::Box
-    }
-
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
     fn get_bbox(&self) -> &super::BBox {
         &self.bbox
     }
@@ -61,19 +53,15 @@ impl Shape for Cuboid {
         self.bbox.centroid
     }
 
-    fn get_shader(&self) -> Arc<dyn Shader> {
-        self.shader.clone()
-    }
+    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+        if let Some(t) = self
+            .bbox
+            .hit(&hit_record.ray, hit_record.t_min, hit_record.t)
+        {
+            hit_record.t = t;
 
-    fn get_material(&self) -> Arc<dyn Material> {
-        self.material.clone()
-    }
-
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
-        if let Some(t) = self.bbox.hit(&hit.ray, hit.t_min, hit.t) {
-            hit.t = t;
-            hit.set_normal(self.normal(&hit.hit_point()));
-            hit.shape = Some(self);
+            let normal = self.normal(&hit_record.point());
+            hit_record.set_hit_data(normal, (0., 0.), self.material.clone());
 
             return true;
         }

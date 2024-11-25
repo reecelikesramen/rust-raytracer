@@ -7,12 +7,12 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Dielectric {
-    attenuation: Color,
+    attenuation: Arc<dyn Texture>,
     refractive_index: Real,
 }
 
 impl Dielectric {
-    pub fn new(attenuation: Color, refractive_index: Real) -> Self {
+    pub fn new(attenuation: Arc<dyn Texture>, refractive_index: Real) -> Self {
         Self {
             attenuation,
             refractive_index,
@@ -21,32 +21,33 @@ impl Dielectric {
 }
 
 impl Material for Dielectric {
-    fn scatter(&self, hit_record: &Hit) -> Option<(Ray, Color)> {
-        let refractive_index = if hit_record.front_face {
+    fn scatter(&self, hit_record: &HitRecord, hit_data: &HitData) -> Option<(Ray, Color)> {
+        let refractive_index = if hit_data.front_face {
             1.0 / self.refractive_index
         } else {
             self.refractive_index
         };
 
         let unit_direction = Unit::new_normalize(hit_record.ray.direction);
-        let cosine = -unit_direction.dot(&hit_record.normal).min(1.0);
+        let cosine = -unit_direction.dot(&hit_data.normal).min(1.0);
         let sine = (1.0 - cosine * cosine).sqrt();
 
         let random: Real = rand::thread_rng().gen();
         let direction =
             if refractive_index * sine > 1.0 || reflectance(cosine, refractive_index) > random {
                 // cannot refract, must reflect
-                reflect(&unit_direction, &hit_record.normal)
+                reflect(&unit_direction, &hit_data.normal)
             } else {
-                refract(&unit_direction, &hit_record.normal, refractive_index)
+                refract(&unit_direction, &hit_data.normal, refractive_index)
             };
 
+        let hit_point = hit_record.point();
         Some((
             Ray {
-                origin: hit_record.hit_point(),
+                origin: hit_point,
                 direction,
             },
-            self.attenuation,
+            self.attenuation.color(hit_data.uv, &hit_point),
         ))
     }
 }

@@ -4,18 +4,18 @@ use super::*;
 
 #[derive(Debug)]
 pub struct Lambertian {
-    albedo: Color,
+    albedo: Arc<dyn Texture>,
 }
 
 impl Lambertian {
-    pub fn new(albedo: Color) -> Self {
+    pub fn new(albedo: Arc<dyn Texture>) -> Self {
         Self { albedo }
     }
 }
 
 impl Material for Lambertian {
-    fn scatter(&self, hit: &Hit) -> Option<(Ray, Color)> {
-        let normal = hit.normal.into_inner();
+    fn scatter(&self, hit: &HitRecord, hit_data: &HitData) -> Option<(Ray, Color)> {
+        let normal = hit_data.normal.into_inner();
         let random = random_unit_v3(&mut rand::thread_rng());
         let scatter_direction = normal + random;
 
@@ -25,12 +25,13 @@ impl Material for Lambertian {
             scatter_direction.normalize()
         };
 
+        let hit_point = hit.point();
         Some((
             Ray {
-                origin: hit.hit_point(),
+                origin: hit_point,
                 direction: scatter_direction,
             },
-            self.albedo,
+            self.albedo.color(hit_data.uv, &hit_point),
         ))
     }
 }
