@@ -8,7 +8,13 @@
     "**/Thumbs.db": true,
     "target": true,
     "Cargo.lock": true,
-    ".aider*": true
+    ".aider*": true,
+    "cpp": true
+  },
+  "search.exclude": {
+    "**/target": true,
+    ".aider*": true,
+    "cpp": true
   },
   "[rust]": {
     "editor.formatOnSave": true,

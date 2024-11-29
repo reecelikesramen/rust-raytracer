@@ -1,15 +1,12 @@
-#![allow(unused)] // For beginning only
-
 mod output;
-use std::str::FromStr;
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
+use indicatif::{ProgressBar, ProgressStyle};
 use output::save;
 
-extern crate clap;
-extern crate indicatif;
-extern crate raytracer_lib;
 use clap::{Parser, ValueEnum};
-use raytracer_lib::{parse_scene, public_consts, render, Framebuffer, Scene};
+use rayon::prelude::*;
+use raytracer_lib::{public_consts, render_pixel, Framebuffer, SceneDescription, SceneGraph};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum AntialiasMethod {
@@ -49,21 +46,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     println!("{:?}", args);
 
-    // read scene path as string
-    let scene_json = std::fs::read_to_string(&args.scene_path)?;
+    // Scene parsing spinner
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100)); // Spin every 100ms
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap(),
+    );
 
-    let scene = parse_scene(
-        &scene_json,
+    // Load JSON into scene description
+    spinner.set_message("Loading JSON...");
+    let scene_json = std::fs::read_to_string(&args.scene_path)?;
+    let scene_desc = SceneDescription::from_json(&scene_json)?;
+
+    // Load scene data
+    spinner.set_message("Loading scene data...");
+    let scene_root = Path::new(&args.scene_path).parent().unwrap();
+    let mut scene_data: HashMap<String, Vec<u8>> = HashMap::new();
+    for relative_path in &scene_desc.data_needed {
+        let bytes = std::fs::read(scene_root.join(relative_path))?;
+        scene_data.insert(relative_path.clone(), bytes);
+    }
+
+    // Scene parsing
+    let scene = SceneGraph::from_description(
+        &scene_desc,
+        &scene_data,
         args.width,
         args.height,
         args.aspect_ratio,
         args.recursion_depth,
-        args.disable_shadows,
-        args.render_normals,
     )?;
 
-    #[cfg(debug_assertions)]
-    println!("{:#?}", scene);
+    // #[cfg(debug_assertions)]
+    // println!("{:#?}", scene);
+
+    spinner.finish_with_message("Scene parsing complete");
 
     let rays_per_pixel = args
         .rays_per_pixel
@@ -78,21 +97,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )));
     }
 
-    let pb = indicatif::ProgressBar::new((scene.image_width * scene.image_height) as u64);
-    let per_pixel_cb = || {
-        pb.inc(1);
-    };
+    let width = scene.image_width;
+    let height = scene.image_height;
+    let pb = indicatif::ProgressBar::new((width * height) as u64);
+    pb.set_style(
+        indicatif::ProgressStyle::default_bar()
+            .template("{wide_bar} {percent}%\n[{elapsed_precise}] [{eta_precise}]")?,
+        // .template("Elapsed: {elapsed} Remaining: {eta}\n{wide_bar} {percent}%")?,
+    );
 
-    let aa_method = match args.antialias_method {
+    let antialias_method = match args.antialias_method {
         Some(AntialiasMethod::Normal) => raytracer_lib::AntialiasMethod::Normal,
         Some(AntialiasMethod::Jittered) => raytracer_lib::AntialiasMethod::Jittered,
         Some(AntialiasMethod::Random) => raytracer_lib::AntialiasMethod::Random,
         None => raytracer_lib::AntialiasMethod::Normal,
     };
 
-    let fb = render(&scene, sqrt_rays_per_pixel, aa_method, Some(&per_pixel_cb));
-    save(args.output_path.as_str(), &fb);
-    pb.finish_with_message("Render complete");
+    let framebuffer = Arc::new(Framebuffer::new(width, height));
+
+    // # Column-chunk parallel version 37 seconds
+    (0..width).into_par_iter().for_each(|i| {
+        for j in 0..height {
+            render_pixel(
+                framebuffer.clone(),
+                &scene,
+                sqrt_rays_per_pixel,
+                antialias_method,
+                i,
+                j,
+            );
+            pb.inc(1);
+        }
+    });
+
+    let framebuffer = match Arc::try_unwrap(framebuffer) {
+        Ok(it) => it,
+        Err(_) => {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "failed to unwrap framebuffer after render",
+            )))
+        }
+    };
+
+    save(args.output_path.as_str(), framebuffer);
+    pb.finish_with_message("Rendering complete");
 
     Ok(())
 }

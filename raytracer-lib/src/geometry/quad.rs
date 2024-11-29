@@ -1,66 +1,44 @@
-use crate::material::DEFAULT_MATERIAL;
+use na::Unit;
 
 use super::*;
-use na::Unit;
-use std::sync::Arc;
 
 #[derive(Debug)]
-pub struct Triangle {
-    a: P3,
-    b: P3,
-    c: P3,
-    normal_a: V3,
-    normal_b: V3,
-    normal_c: V3,
+pub struct Quad {
+    q: P3,
+    u: V3,
+    v: V3,
     bbox: BBox,
     material: Arc<dyn Material>,
 }
 
-impl Triangle {
-    pub fn new(a: P3, b: P3, c: P3, material: Arc<dyn Material>) -> Self {
-        let normal = (b - a).cross(&(c - a)).normalize();
+impl Quad {
+    pub fn new(q: P3, u: V3, v: V3, material: Arc<dyn Material>) -> Self {
         Self {
-            a,
-            b,
-            c,
-            normal_a: normal,
-            normal_b: normal,
-            normal_c: normal,
-            bbox: BBox::from_points(&[a, b, c]),
+            q,
+            u,
+            v,
+            bbox: BBox::from_points(&[q, q + u + v]),
             material,
-        }
-    }
-
-    pub fn from_mesh(a: P3, b: P3, c: P3, normal_a: V3, normal_b: V3, normal_c: V3) -> Self {
-        Self {
-            a,
-            b,
-            c,
-            normal_a,
-            normal_b,
-            normal_c,
-            bbox: BBox::from_points(&[a, b, c]),
-            material: DEFAULT_MATERIAL.clone(),
         }
     }
 }
 
-impl Shape for Triangle {
+impl Shape for Quad {
     fn get_bbox(&self) -> &BBox {
         &self.bbox
     }
 
     fn get_centroid(&self) -> P3 {
-        P3::from((self.a.coords + self.b.coords + self.c.coords) / 3.0)
+        self.bbox.centroid
     }
 
     fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         use na::Matrix3;
 
         // Create the matrices for Cramer's rule
-        let ab = self.a - self.b;
-        let ac = self.a - self.c;
-        let ao = self.a - hit_record.ray.origin;
+        let ab = -self.u;
+        let ac = -self.v;
+        let ao = self.q - hit_record.ray.origin;
         let d = hit_record.ray.direction;
 
         // Matrix A is common denominator for all calculations
@@ -96,20 +74,15 @@ impl Shape for Triangle {
         let det_beta = matrix_beta.determinant();
         let beta = det_beta / det_a;
 
-        if beta < 0.0 || beta > 1.0 - gamma {
+        if beta < 0.0 || beta > 1.0 {
             return false;
         }
 
-        let normal =
-            (1.0 - beta - gamma) * self.normal_a + beta * self.normal_b + gamma * self.normal_c;
+        let normal = Unit::new_normalize(self.u.cross(&self.v));
 
         // We have a valid hit, update the hit record
         hit_record.t = intersect_t;
-        hit_record.set_hit_data(
-            Unit::new_normalize(normal),
-            (beta, gamma),
-            self.material.clone(),
-        );
+        hit_record.set_hit_data(normal, (beta, gamma), self.material.clone());
 
         true
     }

@@ -1,6 +1,6 @@
 use super::*;
 use crate::math::Ray;
-use crate::{prelude::*, vec3};
+use crate::V3;
 
 #[derive(Debug)]
 pub struct OrthographicCamera {
@@ -8,9 +8,16 @@ pub struct OrthographicCamera {
 }
 
 impl OrthographicCamera {
-    pub fn new(position: Vec3, view_direction: &Vec3, aspect_ratio: Real) -> Self {
+    pub fn new(position: P3, view_direction: &V3, aspect_ratio: Real) -> Self {
+        let image_plane_width = DEFAULT_IMAGE_PLANE_WIDTH;
+        let image_plane_height = image_plane_width / aspect_ratio;
         Self {
-            base: CameraBase::new(position, view_direction, aspect_ratio),
+            base: CameraBase::new(
+                position,
+                view_direction,
+                image_plane_width,
+                image_plane_height,
+            ),
         }
     }
 }
@@ -18,10 +25,10 @@ impl OrthographicCamera {
 impl Camera for OrthographicCamera {
     fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray {
         let (u, v) = self.base.get_uv(i, j, di, dj);
-        let origin = self.base.basis.position + vec3!(u, v, 0.0);
+        let origin = self.base.basis.position + V3::new(u, v, 0.0);
         Ray {
             origin,
-            direction: vec3!(0.0, 0.0, -1.0),
+            direction: V3::new(0.0, 0.0, -1.0),
         }
     }
 

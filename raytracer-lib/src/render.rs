@@ -1,91 +1,52 @@
-use std::any::Any;
-use std::borrow::BorrowMut;
+use std::sync::Arc;
 
 use crate::antialias::{antialias, AntialiasMethod};
-use crate::geometry::Sphere;
-use crate::scene::Scene;
-use crate::shader::Hit;
+use crate::hit_record::HitRecord;
+use crate::scene::SceneGraph;
 use crate::Framebuffer;
-use crate::{color, prelude::*, scene};
-
-static NOP_CB: fn() -> () = || {};
-
-pub fn render(
-    scene: &Scene,
-    sqrt_rays_per_pixel: u16,
-    antialias_method: AntialiasMethod,
-    per_pixel_cb: Option<&dyn Fn() -> ()>,
-) -> Framebuffer {
-    let mut fb = Framebuffer::new(scene.image_width, scene.image_width);
-    render_mut(
-        &mut fb,
-        scene,
-        sqrt_rays_per_pixel,
-        antialias_method,
-        per_pixel_cb,
-        None,
-    );
-    fb
-}
-
-pub fn render_mut(
-    fb: &mut Framebuffer,
-    scene: &Scene,
-    sqrt_rays_per_pixel: u16,
-    antialias_method: AntialiasMethod,
-    per_pixel_cb: Option<&dyn Fn() -> ()>,
-    wasm_log: Option<&dyn Fn(&str) -> ()>,
-) {
-    let width = scene.image_width;
-    let height = scene.image_height;
-    let cb = per_pixel_cb.unwrap_or(&NOP_CB);
-
-    for i in 0..width {
-        for j in 0..height {
-            render_pixel(
-                fb,
-                scene,
-                sqrt_rays_per_pixel,
-                antialias_method,
-                i,
-                j,
-                per_pixel_cb,
-                wasm_log,
-            )
-            // wasm_log(&format!("On pixel {} {}", i, j));
-        }
-    }
-}
+use crate::{color, prelude::*};
 
 pub fn render_pixel(
-    fb: &mut Framebuffer,
-    scene: &Scene,
+    fb: Arc<Framebuffer>,
+    scene: &SceneGraph,
     sqrt_rays_per_pixel: u16,
     antialias_method: AntialiasMethod,
     i: u32,
     j: u32,
-    per_pixel_cb: Option<&dyn Fn() -> ()>,
-    wasm_log: Option<&dyn Fn(&str) -> ()>,
 ) {
     let mut color = color!(0.0, 0.0, 0.0);
     for p in 0..sqrt_rays_per_pixel {
         for q in 0..sqrt_rays_per_pixel {
             let (di, dj) = antialias(antialias_method, sqrt_rays_per_pixel, p, q);
             let ray = scene.camera.generate_ray(i, j, di, dj);
-            let mut hit = Hit::new(ray, &scene);
+            let hit = HitRecord::new(ray);
 
-            if scene.bvh.closest_hit(&mut hit) {
-                color += hit.shape.unwrap().get_shader().apply(&hit);
-            } else {
-                color += scene.background_color;
-            }
+            color += ray_color(&scene, hit);
         }
     }
     // divide by number of samples
     color /= (sqrt_rays_per_pixel * sqrt_rays_per_pixel) as f32;
-
-    if let Some(cb) = per_pixel_cb {
-        cb();
-    }
     fb.set_pixel(i, j, color);
+}
+
+fn ray_color(scene: &SceneGraph, mut hit: HitRecord) -> Color {
+    if hit.depth >= scene.recursion_depth {
+        return color!(0.0, 0.0, 0.0);
+    }
+
+    let hit_data = match scene.bvh.get_closest_hit_data(&mut hit) {
+        Some(hit_data) => hit_data,
+        None => return scene.background_color,
+    };
+
+    let color_emitted = hit_data.material.emitted(hit_data.uv, &hit.point());
+
+    let (ray, attenuation) = match hit_data.material.scatter(&hit, &hit_data) {
+        Some((r, a)) => (r, a),
+        None => return color_emitted,
+    };
+
+    let color_scattered = attenuation.component_mul(&ray_color(&scene, hit.bounce(ray)));
+
+    color_emitted + color_scattered
 }
