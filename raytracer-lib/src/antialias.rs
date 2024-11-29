@@ -12,7 +12,7 @@ pub enum AntialiasMethod {
 impl std::str::FromStr for AntialiasMethod {
     type Err = ();
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "normal" => Ok(AntialiasMethod::Normal),
             "jittered" => Ok(AntialiasMethod::Jittered),
@@ -31,7 +31,7 @@ pub fn antialias(
     match method {
         AntialiasMethod::Normal => normal(sqrt_rays_per_pixel, p, q),
         AntialiasMethod::Jittered => jittered(sqrt_rays_per_pixel, p, q),
-        AntialiasMethod::Random => random(sqrt_rays_per_pixel, p, q),
+        AntialiasMethod::Random => random(),
     }
 }
 
@@ -49,7 +49,7 @@ fn jittered(sqrt_rays_per_pixel: u16, p: u16, q: u16) -> (Real, Real) {
     )
 }
 
-fn random(sqrt_rays_per_pixel: u16, p: u16, q: u16) -> (Real, Real) {
+fn random() -> (Real, Real) {
     (
         rand::thread_rng().gen::<Real>(),
         rand::thread_rng().gen::<Real>(),

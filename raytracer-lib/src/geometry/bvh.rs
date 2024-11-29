@@ -1,4 +1,7 @@
-use crate::{geometry::Shape, math::Ray, prelude::*};
+use crate::{
+    geometry::Shape,
+    hit_record::{HitData, HitRecord},
+};
 use std::sync::Arc;
 
 use super::BBox;
@@ -90,7 +93,7 @@ impl BVHNode {
         &self.bbox
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    pub fn closest_hit(&self, hit: &mut HitRecord) -> bool {
         // First check if ray intersects this node's bounding box
         if self.bbox.hit(&hit.ray, hit.t_min, hit.t).is_none() {
             return false;
@@ -137,8 +140,17 @@ impl BVH {
         }
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    pub fn closest_hit(&self, hit: &mut HitRecord) -> bool {
         self.root.closest_hit(hit)
+    }
+
+    pub fn get_closest_hit_data(&self, hit: &mut HitRecord) -> Option<HitData> {
+        self.closest_hit(hit);
+        hit.hit_data.take()
+    }
+
+    pub fn get_bbox(&self) -> &BBox {
+        &self.root.bbox
     }
 }
 
@@ -153,13 +165,13 @@ impl BVH {
 //         let shader = Arc::new(NormalShader::new());
 //         let shapes: Vec<Arc<dyn Shape>> = vec![
 //             Arc::new(Sphere::new(
-//                 vec3!(0.0, 0.0, -5.0),
+//                 V3::new(0.0, 0.0, -5.0),
 //                 1.0,
 //                 shader.clone(),
 //                 "sphere1",
 //             )),
 //             Arc::new(Sphere::new(
-//                 vec3!(2.0, 0.0, -5.0),
+//                 V3::new(2.0, 0.0, -5.0),
 //                 1.0,
 //                 shader.clone(),
 //                 "sphere2",
@@ -169,8 +181,8 @@ impl BVH {
 //         let bvh = BVH::new(shapes);
 //         assert!(bvh.root.bbox.hit(
 //             &Ray {
-//                 origin: vec3!(0.0, 0.0, 0.0),
-//                 direction: vec3!(0.0, 0.0, -1.0),
+//                 origin: V3::new(0.0, 0.0, 0.0),
+//                 direction: V3::new(0.0, 0.0, -1.0),
 //             },
 //             0.0,
 //             f64::INFINITY,

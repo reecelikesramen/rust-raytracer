@@ -29,7 +29,7 @@
           "kind": "bin"
         }
       },
-      "args": ["-x500", "-y500", "-i${workspaceFolder}/cpp/SceneData/scenes_A/mirrorScene00.json"],
+      "args": ["-r1", "-x360", "-y360", "--recursion-depth", "10", "-i${workspaceFolder}/scenes/scenes/${input:scene_name}.json"],
       "cwd": "${workspaceFolder}"
     },
     {
@@ -45,6 +45,13 @@
       },
       "args": [],
       "cwd": "${workspaceFolder}"
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scene_name",
+      "type": "promptString",
+      "description": "Enter scene name"
     }
   ]
 }
