@@ -21,7 +21,11 @@ web-sys = { version = "0.3", features = [
     "WebGlProgram",
     "WebGlShader",
     "WebGlBuffer",
-    "WebGlTexture"
+    "WebGlTexture",
+    "Request",
+    "Response",
+    "RequestInit",
+    "RequestMode",
 ]}
 js-sys = "0.3"
 futures = "0.3.31"

@@ -7,38 +7,13 @@ use tobj::load_obj_buf;
 
 use crate::{
     camera::*,
-    color,
     geometry::*,
-    light::*,
-    material::{Dielectric, Diffuse, Lambertian, Material, Metal, DEFAULT_MATERIAL},
+    material::{Dielectric, Diffuse, DiffuseLight, Lambertian, Material, Metal, DEFAULT_MATERIAL},
     prelude::*,
-    shader::*,
     texture::{CheckeredTexture, ImageTexture, SolidColor, Texture},
     V3,
 };
-use std::{
-    collections::{HashMap, HashSet},
-    io::BufReader,
-    sync::Arc,
-};
-
-#[derive(Debug)]
-pub struct Scene {
-    pub disable_shadows: bool,
-    pub background_color: Color,
-    pub camera: Box<dyn crate::camera::Camera>,
-    pub shapes: Vec<Arc<dyn crate::geometry::Shape>>,
-    pub lights: Vec<Box<dyn crate::light::Light>>,
-    pub bvh: crate::geometry::BVH,
-    pub recursion_depth: u16,
-    pub image_width: u32,
-    pub image_height: u32,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-struct SceneModel {
-    scene: SceneData,
-}
+use std::{collections::HashMap, io::BufReader, sync::Arc};
 
 #[derive(Deserialize, Serialize, Debug)]
 struct SceneData {
@@ -226,6 +201,7 @@ struct ShaderData {
 #[serde(tag = "_type")]
 enum ShaderType {
     Diffuse(DiffuseShaderData),
+    DiffuseLight(DiffuseLightShaderData),
     Lambertian(LambertianShaderData),
     BlinnPhong(BlinnPhongShaderData),
     #[serde(alias = "Mirror")]
@@ -252,9 +228,8 @@ enum MaterialProperty {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct LambertianShaderData {
-    diffuse: MaterialProperty,
-    #[serde(default)]
-    samples: u32,
+    #[serde(alias = "diffuse")]
+    albedo: MaterialProperty,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -273,9 +248,14 @@ struct GGXMirrorShaderData {
 
 #[derive(Deserialize, Serialize, Debug)]
 struct DiffuseShaderData {
-    diffuse: MaterialProperty,
-    #[serde(default)]
-    samples: u32,
+    #[serde(alias = "diffuse")]
+    albedo: MaterialProperty,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct DiffuseLightShaderData {
+    #[serde(alias = "diffuse")]
+    emission: MaterialProperty,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -313,7 +293,7 @@ impl ShaderRefType {
 }
 
 impl Serialize for ShaderRefType {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
@@ -435,420 +415,418 @@ struct TextureData {
     name: String,
 }
 
-pub type FetchDataFn = dyn Fn(&str) -> Result<Vec<u8>, Box<dyn std::error::Error>>;
+// ### SCENE DESCRIPTION INTERMEDIATE REPRESENTATION ###
 
-fn to_texture(
-    material_property: &MaterialProperty,
-    texture_map: &HashMap<String, Arc<Rgb32FImage>>,
-) -> Result<Arc<dyn Texture>, Box<dyn std::error::Error>> {
-    match material_property {
-        MaterialProperty::Color(color) => Ok(Arc::new(SolidColor::new(color.0))),
-        MaterialProperty::Texture { texture, tint } => match texture_map.get(texture) {
-            Some(data) => Ok(Arc::new(ImageTexture::new(data.clone(), tint.0))),
-            None => Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "shape references non-existent material",
-            ))),
-        },
+#[derive(Deserialize, Serialize, Debug)]
+pub struct SceneDescription {
+    scene: SceneData,
+    #[serde(skip)]
+    pub data_needed: Vec<String>,
+    #[serde(skip)]
+    camera_index: usize,
+}
+
+impl SceneDescription {
+    /// Load the scene representation from JSON
+    pub fn from_json(json: &str) -> Result<Self> {
+        let mut scene_desc: Self = serde_json::from_str(json)?;
+
+        // print scene data
+        #[cfg(debug_assertions)]
+        println!("Scene Description: {:#?}", scene_desc);
+
+        // Check that there is exactly one camera
+        if scene_desc.scene.cameras.is_empty() {
+            return Err("scene must have at least one camera".into());
+        }
+
+        // Select camera
+        scene_desc.camera_index = if scene_desc.scene.cameras.len() == 1 {
+            0
+        } else {
+            // camera name specified or default
+            let camera_name = scene_desc
+                .scene
+                .scene_parameters
+                .camera
+                .clone()
+                .unwrap_or(DEFAULT_CAMERA.to_string());
+
+            // filter scene.cameras by name
+            scene_desc
+                .scene
+                .cameras
+                .iter()
+                .position(|c| c.name == camera_name)
+                .ok_or(format!("camera {} not found", camera_name))?
+        };
+
+        // for every shape in shapes and instances, map to their model paths
+        let model_paths: Vec<String> = scene_desc
+            .scene
+            .shapes
+            .iter()
+            .chain(&scene_desc.scene.instances)
+            .filter_map(|s| match &s.shape {
+                ShapeType::Mesh(mesh) => Some(mesh.model_path.clone()),
+                _ => None,
+            })
+            .collect();
+
+        // map textures to their image paths
+        let texture_paths: Vec<String> = scene_desc
+            .scene
+            .textures
+            .iter()
+            .map(|t| t.image_path.clone())
+            .collect();
+
+        // join all paths into a single list
+        let all_paths = model_paths
+            .into_iter()
+            .chain(texture_paths.into_iter())
+            .collect();
+
+        scene_desc.data_needed = all_paths;
+
+        Ok(scene_desc)
     }
 }
 
-pub fn parse_scene(
-    scene_json: &str,
-    image_width: Option<u32>,
-    image_height: Option<u32>,
-    aspect_ratio: Option<Real>,
-    recursion_depth: Option<u16>,
-    disable_shadows: bool,
-    render_normals: bool,
-    fetch_data: &FetchDataFn,
-) -> Result<Scene, Box<dyn std::error::Error>> {
-    let scene_file: SceneModel = serde_json::from_str(scene_json)?;
-    let scene = scene_file.scene;
+// ### SCENE GRAPH REPRESENTATION ###
 
-    // print scene data
-    #[cfg(debug_assertions)]
-    println!("{:#?}", scene);
+#[derive(Debug)]
+pub struct SceneGraph {
+    pub camera: Box<dyn Camera>,
+    pub bvh: BVH,
+    pub background_color: Color,
+    pub recursion_depth: u16,
+    pub image_width: u32,
+    pub image_height: u32,
+}
 
-    // Image size or default
-    let image_width = image_width.unwrap_or(DEFAULT_IMAGE_WIDTH);
-    let image_height = image_height.unwrap_or(DEFAULT_IMAGE_HEIGHT);
+impl SceneGraph {
+    pub fn from_description(
+        scene_desc: &SceneDescription,
+        scene_data: &HashMap<String, Vec<u8>>,
+        image_width: Option<u32>,
+        image_height: Option<u32>,
+        aspect_ratio: Option<Real>,
+        recursion_depth: Option<u16>,
+    ) -> Result<Self> {
+        let SceneDescription {
+            scene,
+            camera_index,
+            data_needed,
+        } = scene_desc;
 
-    // Calculate aspect ratio if not specified
-    let aspect_ratio = aspect_ratio.unwrap_or(image_width as Real / image_height as Real);
+        // check that `scene_data` has entries for all `data_needed`
+        for data_name in data_needed {
+            if !scene_data.contains_key(data_name) {
+                return Err(format!("scene data does not contain entry for {}", data_name).into());
+            }
+        }
 
-    // Check that there is exactly one camera
-    if scene.cameras.is_empty() {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "scene must have at least one camera",
-        )));
-    }
+        // Image size or default
+        let image_width = image_width.unwrap_or(DEFAULT_IMAGE_WIDTH);
+        let image_height = image_height.unwrap_or(DEFAULT_IMAGE_HEIGHT);
 
-    // Select camera
-    let camera_index = if scene.cameras.len() == 1 {
-        0
-    } else {
-        // camera name specified or default
-        let camera_name = scene
-            .scene_parameters
-            .camera
-            .unwrap_or(DEFAULT_CAMERA.to_string());
+        // Calculate aspect ratio if not specified
+        let aspect_ratio = aspect_ratio.unwrap_or(image_width as Real / image_height as Real);
 
-        // filter scene.cameras by name
-        scene
-            .cameras
-            .iter()
-            .position(|c| c.name == camera_name)
-            .ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("camera {} not found", camera_name),
-                )
-            })?
-    };
+        // Create camera
+        let mut camera: Box<dyn Camera> = match &scene.cameras[*camera_index].camera_type {
+            CameraType::Perspective(perspective) => {
+                let position = P3::from(perspective.position.0);
+                let view_direction = perspective.orientation.get_view_direction(position);
 
-    // Create camera
-    let mut camera: Box<dyn crate::camera::Camera> = match &scene.cameras[camera_index].camera_type
-    {
-        CameraType::Perspective(perspective) => {
-            let position = P3::from(perspective.position.0);
-            let view_direction = perspective.orientation.get_view_direction(position);
-
-            Box::new(match &perspective.camera_type {
-                PerspectiveCameraType::Old(old) => PerspectiveCamera::old(
-                    position,
-                    &view_direction,
-                    aspect_ratio,
-                    old.focal_length,
-                ),
-                PerspectiveCameraType::New(new) => {
-                    let defocus_angle = new.defocus_angle.unwrap_or(0.0);
-                    let focus_distance = new.focus_distance.unwrap_or(1.0);
-
-                    PerspectiveCamera::new(
+                Box::new(match &perspective.camera_type {
+                    PerspectiveCameraType::Old(old) => PerspectiveCamera::old(
                         position,
                         &view_direction,
                         aspect_ratio,
-                        new.vertical_fov,
-                        focus_distance,
-                        defocus_angle,
-                    )
-                }
-            })
-        }
-        CameraType::Orthographic(orthographic) => {
-            let position = P3::from(orthographic.position.0);
+                        old.focal_length,
+                    ),
+                    PerspectiveCameraType::New(new) => {
+                        let defocus_angle = new.defocus_angle.unwrap_or(0.0);
+                        let focus_distance = new.focus_distance.unwrap_or(1.0);
 
-            Box::new(OrthographicCamera::new(
-                position,
-                &orthographic.orientation.get_view_direction(position),
-                aspect_ratio,
-            ))
-        }
-    };
-
-    // Set image size
-    camera.set_image_pixels(image_width, image_height);
-
-    // Create textures
-    let mut textures: HashMap<String, Arc<Rgb32FImage>> = HashMap::new();
-    for texture_data in scene.textures.iter() {
-        let image_buffer = fetch_data(&texture_data.image_path)?;
-        let image: Arc<Rgb32FImage> = Arc::new(image::load_from_memory(&image_buffer)?.to_rgb32f());
-        textures.insert(texture_data.name.clone(), image);
-    }
-
-    // Create materials
-    let mut materials: HashMap<String, Arc<dyn Material>> = HashMap::new();
-    for shader in scene.shaders.iter() {
-        let material_name = shader.name.clone();
-        let material: Arc<dyn Material> = match &shader.shader {
-            ShaderType::Lambertian(lambertian) => {
-                let albedo = to_texture(&lambertian.diffuse, &textures)?;
-                Arc::new(Lambertian::new(albedo))
-            }
-            ShaderType::Diffuse(diffuse) => {
-                let albedo = to_texture(&diffuse.diffuse, &textures)?;
-                Arc::new(Diffuse::new(albedo))
-            }
-            ShaderType::Metal(metal) => {
-                let albedo = to_texture(&metal.albedo, &textures)?;
-                Arc::new(Metal::new(albedo, metal.fuzz))
-            }
-            ShaderType::Dielectric(dielectric) => {
-                let attenutation = to_texture(&dielectric.attenuation, &textures)?;
-                Arc::new(Dielectric::new(attenutation, dielectric.refractive_index))
-            }
-            _ => Arc::new(Lambertian::new(Arc::new(CheckeredTexture::default()))),
-            // _ => todo!("other materials not implemented yet"),
-        };
-        materials.insert(material_name, material);
-    }
-
-    // Create instances
-    let mut instances: HashMap<String, Arc<dyn Shape>> = HashMap::new();
-    for shape in scene.instances.iter() {
-        let instance_name = Box::leak(shape.name.clone().into_boxed_str());
-        let shader = Arc::new(NullShader::default());
-        let material = DEFAULT_MATERIAL.clone();
-        let shape: Arc<dyn Shape> = match &shape.shape {
-            ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
-                P3::from(sphere.center.0),
-                sphere.radius,
-                shader,
-                material,
-                instance_name,
-            )),
-            ShapeType::Box(cuboid) => Arc::new(match cuboid {
-                BoxData::MinMaxPoint {
-                    min: min_point,
-                    max: max_point,
-                } => Cuboid::new(
-                    P3::from(min_point.0),
-                    P3::from(max_point.0),
-                    shader,
-                    material,
-                    instance_name,
-                ),
-                BoxData::CenterExtent { center, extent } => {
-                    let center = P3::from(center.0);
-                    let half_extent = extent.0 / 2.0;
-                    let min_point = center - half_extent;
-                    let max_point = center + half_extent;
-                    Cuboid::new(min_point, max_point, shader, material, instance_name)
-                }
-            }),
-            ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
-                P3::from(triangle.a.0),
-                P3::from(triangle.b.0),
-                P3::from(triangle.c.0),
-                material,
-                instance_name,
-            )),
-            ShapeType::Quad(quad) => Arc::new(Quad::new(
-                P3::from(quad.q.0),
-                quad.u.0,
-                quad.v.0,
-                material,
-                instance_name,
-            )),
-            ShapeType::Mesh(mesh) => {
-                let model_buffer = fetch_data(&mesh.model_path)?;
-                let mut reader = BufReader::new(model_buffer.as_slice());
-
-                let (models, _) = load_obj_buf(
-                    &mut reader,
-                    &tobj::LoadOptions {
-                        triangulate: true,
-                        ..Default::default()
-                    },
-                    |_mat_path| unimplemented!("material loading not implemented yet"),
-                )
-                .expect("Failed to load model for mesh");
-
-                if models.len() != 1 {
-                    panic!(
-                        "expected exactly one model, found {} for mesh {}",
-                        models.len(),
-                        mesh.model_path
-                    );
-                }
-
-                // take ownership of the model from the Vec
-                let model = models.into_iter().next().unwrap();
-                Arc::new(Mesh::new(model, material, instance_name))
-            }
-            ShapeType::Instance(_) => panic!("An instanced shape can not be type instance"),
-        };
-        instances.insert(instance_name.to_string(), shape);
-    }
-
-    // create a set of names for the shapes to that names are unique
-    let mut shape_names: HashSet<&str> = HashSet::new();
-
-    // Create shapes
-    let mut shapes: Vec<Arc<dyn Shape>> = Vec::new();
-    for shape in scene.shapes.iter() {
-        let shader = Arc::new(NullShader::default());
-
-        // extract material
-        let material = match materials.get(shape.shader.name()) {
-            Some(s) => Arc::clone(s),
-            None => {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    "shape references non-existent material",
-                )))
-            }
-        };
-
-        let shape_name = Box::leak(shape.name.clone().into_boxed_str());
-        if !shape_names.insert(shape_name) {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "shape names must be unique",
-            )));
-        }
-        let shape: Arc<dyn Shape> = match &shape.shape {
-            ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
-                P3::from(sphere.center.0),
-                sphere.radius,
-                shader,
-                material,
-                shape_name,
-            )),
-            ShapeType::Box(cuboid) => Arc::new(match cuboid {
-                BoxData::MinMaxPoint {
-                    min: min_point,
-                    max: max_point,
-                } => Cuboid::new(
-                    P3::from(min_point.0),
-                    P3::from(max_point.0),
-                    shader,
-                    material,
-                    shape_name,
-                ),
-                BoxData::CenterExtent { center, extent } => {
-                    let center = P3::from(center.0);
-                    let half_extent = extent.0 / 2.0;
-                    let min_point = center - half_extent;
-                    let max_point = center + half_extent;
-                    Cuboid::new(min_point, max_point, shader, material, shape_name)
-                }
-            }),
-            ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
-                P3::from(triangle.a.0),
-                P3::from(triangle.b.0),
-                P3::from(triangle.c.0),
-                material,
-                shape_name,
-            )),
-            ShapeType::Quad(quad) => Arc::new(Quad::new(
-                P3::from(quad.q.0),
-                quad.u.0,
-                quad.v.0,
-                material,
-                shape_name,
-            )),
-            ShapeType::Mesh(mesh) => {
-                let model_buffer = fetch_data(&mesh.model_path)?;
-                let mut reader = BufReader::new(model_buffer.as_slice());
-
-                let (models, _) = load_obj_buf(
-                    &mut reader,
-                    &tobj::LoadOptions {
-                        triangulate: true,
-                        ..Default::default()
-                    },
-                    |_mat_path| unimplemented!("material loading not implemented yet"),
-                )
-                .expect("Failed to load model for mesh");
-
-                if models.len() != 1 {
-                    panic!(
-                        "expected exactly one model, found {} for mesh {}",
-                        models.len(),
-                        mesh.model_path
-                    );
-                }
-
-                // take ownership of the model from the Vec
-                let model = models.into_iter().next().unwrap();
-                Arc::new(Mesh::new(model, material, shape_name))
-            }
-            ShapeType::Instance(instance) => {
-                let shape = instances
-                    .get(&instance.instance_of)
-                    .expect("instance ID is not a valid instance")
-                    .clone();
-                let mut translate = V3::default();
-                let mut scale = V3::new(1.0, 1.0, 1.0);
-                let mut rotate = (
-                    Rotation3::identity(),
-                    Rotation3::identity(),
-                    Rotation3::identity(),
-                );
-                for transformation in instance.transform.iter() {
-                    match transformation {
-                        TransformData::Translate { amount } => translate += amount.0,
-                        TransformData::Scale { amount } => scale.component_mul_assign(&amount.0),
-                        TransformData::Rotate { axis, degrees } => {
-                            let angle = PI * degrees / 180.0;
-                            match axis {
-                                RotationAxis::X => {
-                                    rotate.0 = Rotation3::from_axis_angle(&V3::x_axis(), angle)
-                                }
-                                RotationAxis::Y => {
-                                    rotate.1 = Rotation3::from_axis_angle(&V3::y_axis(), angle)
-                                }
-                                RotationAxis::Z => {
-                                    rotate.2 = Rotation3::from_axis_angle(&V3::z_axis(), angle)
-                                }
-                            };
-                        }
+                        PerspectiveCamera::new(
+                            position,
+                            &view_direction,
+                            aspect_ratio,
+                            new.vertical_fov,
+                            focus_distance,
+                            defocus_angle,
+                        )
                     }
-                }
+                })
+            }
+            CameraType::Orthographic(orthographic) => {
+                let position = P3::from(orthographic.position.0);
 
-                let rotation = rotate.2 * rotate.1 * rotate.0;
-
-                Arc::new(Instance::new(
-                    shape,
-                    Translation3::from(translate),
-                    rotation,
-                    Scale3::from(scale),
-                    shader,
-                    material,
-                    shape_name,
+                Box::new(OrthographicCamera::new(
+                    position,
+                    &orthographic.orientation.get_view_direction(position),
+                    aspect_ratio,
                 ))
             }
         };
-        shapes.push(shape);
-    }
 
-    // Create lights
-    let mut lights: Vec<Box<dyn crate::light::Light>> = Vec::new();
-    for light in scene.lights.iter() {
-        let light: Box<dyn Light> = match &light.light_type {
-            LightType::Ambient(ambient_light) => {
-                Box::new(AmbientLight::new(ambient_light.intensity.0))
-            }
-            LightType::Point(point_light) => Box::new(PointLight::new(
-                P3::from(point_light.position.0),
-                point_light.intensity.0,
-            )),
-            _ => unimplemented!("light type not implemented yet"),
-        };
-        lights.push(light);
-    }
+        // Set image size
+        camera.set_image_pixels(image_width, image_height);
 
-    // get background color
-    let background_color = if render_normals {
-        color!(0.0, 0.0, 0.0)
-    } else if let Some(background) = scene.scene_parameters.background {
-        match background {
-            Background::BackgroundColor { background_color } => background_color.0,
-            Background::EnvMap(_) => {
-                unimplemented!("environment maps aren't implemented yet")
-            }
+        // Create textures
+        let mut textures: HashMap<String, Arc<Rgb32FImage>> = HashMap::new();
+        for texture_data in &scene.textures {
+            let image_buffer = scene_data.get(&texture_data.image_path).unwrap();
+            let image: Arc<Rgb32FImage> =
+                Arc::new(image::load_from_memory(&image_buffer)?.to_rgb32f());
+            textures.insert(texture_data.name.clone(), image);
         }
-    } else {
-        DEFAULT_BACKGROUND_COLOR
-    };
 
-    let shape_refs = shapes.clone();
-    let bvh = BVH::new(shape_refs);
+        // Make closure for convenience
+        let to_texture = |mat_prop: &MaterialProperty| {
+            let result: Result<Arc<dyn Texture>> = match mat_prop {
+                MaterialProperty::Color(color) => Ok(Arc::new(SolidColor::new(color.0))),
+                MaterialProperty::Texture { texture, tint } => match textures.get(texture) {
+                    Some(data) => Ok(Arc::new(ImageTexture::new(data.clone(), tint.0))),
+                    None => return Err("shape references non-existent material".into()),
+                },
+            };
+            result
+        };
 
-    let scene = Scene {
-        disable_shadows,
-        background_color,
-        camera,
-        shapes,
-        lights,
-        bvh,
-        recursion_depth: recursion_depth.unwrap_or(DEFAULT_RECURSION_DEPTH),
-        image_width,
-        image_height,
-    };
-    return Ok(scene);
+        // Create materials
+        let mut materials: HashMap<String, Arc<dyn Material>> = HashMap::new();
+        for shader in &scene.shaders {
+            let material_name = shader.name.clone();
+            let material: Arc<dyn Material> = match &shader.shader {
+                ShaderType::Lambertian(lambertian) => {
+                    let albedo = to_texture(&lambertian.albedo)?;
+                    Arc::new(Lambertian::new(albedo))
+                }
+                ShaderType::Diffuse(diffuse) => {
+                    let albedo = to_texture(&diffuse.albedo)?;
+                    Arc::new(Diffuse::new(albedo))
+                }
+                ShaderType::DiffuseLight(diffuse_light) => {
+                    let emission = to_texture(&diffuse_light.emission)?;
+                    Arc::new(DiffuseLight::new(emission))
+                }
+                ShaderType::Metal(metal) => {
+                    let albedo = to_texture(&metal.albedo)?;
+                    Arc::new(Metal::new(albedo, metal.fuzz))
+                }
+                ShaderType::Dielectric(dielectric) => {
+                    let attenutation = to_texture(&dielectric.attenuation)?;
+                    Arc::new(Dielectric::new(attenutation, dielectric.refractive_index))
+                }
+                _ => Arc::new(Lambertian::new(Arc::new(CheckeredTexture::default()))),
+                // _ => todo!("other materials not implemented yet"),
+            };
+            materials.insert(material_name, material);
+        }
+
+        // Create instances
+        let mut instances: HashMap<String, Arc<dyn Shape>> = HashMap::new();
+        for shape in &scene.instances {
+            let instance_name = shape.name.clone();
+            let material = DEFAULT_MATERIAL.clone();
+            let shape: Arc<dyn Shape> = match &shape.shape {
+                ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
+                    P3::from(sphere.center.0),
+                    sphere.radius,
+                    material,
+                )),
+                ShapeType::Box(cuboid) => Arc::new(match cuboid {
+                    BoxData::MinMaxPoint {
+                        min: min_point,
+                        max: max_point,
+                    } => Cuboid::new(P3::from(min_point.0), P3::from(max_point.0), material),
+                    BoxData::CenterExtent { center, extent } => {
+                        let center = P3::from(center.0);
+                        let half_extent = extent.0 / 2.0;
+                        let min_point = center - half_extent;
+                        let max_point = center + half_extent;
+                        Cuboid::new(min_point, max_point, material)
+                    }
+                }),
+                ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
+                    P3::from(triangle.a.0),
+                    P3::from(triangle.b.0),
+                    P3::from(triangle.c.0),
+                    material,
+                )),
+                ShapeType::Quad(quad) => {
+                    Arc::new(Quad::new(P3::from(quad.q.0), quad.u.0, quad.v.0, material))
+                }
+                ShapeType::Mesh(mesh) => {
+                    let model_buffer = scene_data.get(&mesh.model_path).unwrap();
+                    let mut reader = BufReader::new(model_buffer.as_slice());
+
+                    let (models, _) = load_obj_buf(
+                        &mut reader,
+                        &tobj::LoadOptions {
+                            triangulate: true,
+                            ..Default::default()
+                        },
+                        |_mat_path| unimplemented!("material loading not implemented yet"),
+                    )
+                    .expect("Failed to load model for mesh");
+
+                    if models.len() != 1 {
+                        panic!(
+                            "expected exactly one model, found {} for mesh {}",
+                            models.len(),
+                            mesh.model_path
+                        );
+                    }
+
+                    // take ownership of the model from the Vec
+                    let model = models.into_iter().next().unwrap();
+                    Arc::new(Mesh::new(model, material))
+                }
+                ShapeType::Instance(_) => panic!("An instanced shape can not be type instance"),
+            };
+            instances.insert(instance_name.to_string(), shape);
+        }
+
+        // Create shapes
+        let mut shapes: Vec<Arc<dyn Shape>> = Vec::new();
+        for shape in &scene.shapes {
+            // extract material
+            let material = match materials.get(shape.shader.name()) {
+                Some(s) => Arc::clone(s),
+                None => {
+                    return Err(Box::new(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "shape references non-existent material",
+                    )))
+                }
+            };
+
+            let shape: Arc<dyn Shape> = match &shape.shape {
+                ShapeType::Sphere(sphere) => Arc::new(Sphere::new(
+                    P3::from(sphere.center.0),
+                    sphere.radius,
+                    material,
+                )),
+                ShapeType::Box(cuboid) => Arc::new(match cuboid {
+                    BoxData::MinMaxPoint { min, max } => {
+                        Cuboid::new(P3::from(min.0), P3::from(max.0), material)
+                    }
+                    BoxData::CenterExtent { center, extent } => {
+                        let center = P3::from(center.0);
+                        let half_extent = extent.0 / 2.0;
+                        let min_point = center - half_extent;
+                        let max_point = center + half_extent;
+                        Cuboid::new(min_point, max_point, material)
+                    }
+                }),
+                ShapeType::Triangle(triangle) => Arc::new(Triangle::new(
+                    P3::from(triangle.a.0),
+                    P3::from(triangle.b.0),
+                    P3::from(triangle.c.0),
+                    material,
+                )),
+                ShapeType::Quad(quad) => {
+                    Arc::new(Quad::new(P3::from(quad.q.0), quad.u.0, quad.v.0, material))
+                }
+                ShapeType::Mesh(mesh) => {
+                    let model_buffer = scene_data.get(&mesh.model_path).unwrap();
+                    let mut reader = BufReader::new(model_buffer.as_slice());
+
+                    let (models, _) = load_obj_buf(
+                        &mut reader,
+                        &tobj::LoadOptions {
+                            triangulate: true,
+                            ..Default::default()
+                        },
+                        |_mat_path| unimplemented!("material loading not implemented yet"),
+                    )
+                    .expect("Failed to load model for mesh");
+
+                    if models.len() != 1 {
+                        panic!(
+                            "expected exactly one model, found {} for mesh {}",
+                            models.len(),
+                            mesh.model_path
+                        );
+                    }
+
+                    // take ownership of the model from the Vec
+                    let model = models.into_iter().next().unwrap();
+                    Arc::new(Mesh::new(model, material))
+                }
+                ShapeType::Instance(instance) => {
+                    let shape = instances
+                        .get(&instance.instance_of)
+                        .expect("instance ID is not a valid instance")
+                        .clone();
+                    let mut translate = V3::default();
+                    let mut scale = V3::new(1.0, 1.0, 1.0);
+                    let mut rotate = (
+                        Rotation3::identity(),
+                        Rotation3::identity(),
+                        Rotation3::identity(),
+                    );
+                    for transformation in &instance.transform {
+                        match transformation {
+                            TransformData::Translate { amount } => translate += amount.0,
+                            TransformData::Scale { amount } => {
+                                scale.component_mul_assign(&amount.0)
+                            }
+                            TransformData::Rotate { axis, degrees } => {
+                                let angle = PI * degrees / 180.0;
+                                match axis {
+                                    RotationAxis::X => {
+                                        rotate.0 = Rotation3::from_axis_angle(&V3::x_axis(), angle)
+                                    }
+                                    RotationAxis::Y => {
+                                        rotate.1 = Rotation3::from_axis_angle(&V3::y_axis(), angle)
+                                    }
+                                    RotationAxis::Z => {
+                                        rotate.2 = Rotation3::from_axis_angle(&V3::z_axis(), angle)
+                                    }
+                                };
+                            }
+                        }
+                    }
+
+                    let rotation = rotate.2 * rotate.1 * rotate.0;
+
+                    Arc::new(Instance::new(
+                        shape,
+                        Translation3::from(translate),
+                        rotation,
+                        Scale3::from(scale),
+                        material,
+                    ))
+                }
+            };
+            shapes.push(shape);
+        }
+
+        // get background color
+        let background_color = if let Some(background) = &scene.scene_parameters.background {
+            match background {
+                Background::BackgroundColor { background_color } => background_color.0,
+                Background::EnvMap(_) => {
+                    unimplemented!("environment maps aren't implemented yet")
+                }
+            }
+        } else {
+            DEFAULT_BACKGROUND_COLOR
+        };
+
+        return Ok(Self {
+            camera,
+            bvh: BVH::new(shapes),
+            background_color,
+            recursion_depth: recursion_depth.unwrap_or(DEFAULT_RECURSION_DEPTH),
+            image_width,
+            image_height,
+        });
+    }
 }

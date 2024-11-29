@@ -8,17 +8,10 @@ pub struct Sphere {
     radius: Real,
     bbox: BBox,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Sphere {
-    pub fn new(
-        center: P3,
-        radius: Real,
-        shader: Arc<dyn Shader>,
-        material: Arc<dyn Material>,
-        name: &'static str,
-    ) -> Self {
+    pub fn new(center: P3, radius: Real, material: Arc<dyn Material>) -> Self {
         Self {
             center,
             radius,
@@ -27,7 +20,6 @@ impl Sphere {
                 center + V3::new(radius, radius, radius),
             ),
             material,
-            name,
         }
     }
 
@@ -54,7 +46,7 @@ impl Shape for Sphere {
         self.center
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         let center_to_origin = hit_record.ray.origin - self.center; // vector from center of sphere to ray origin
         let d = hit_record.ray.direction;
         let discriminant = center_to_origin.dot(&d).powi(2)

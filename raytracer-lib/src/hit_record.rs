@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use na::Unit;
 
-use crate::{material::Material, math::Ray, prelude::*, scene::Scene};
+use crate::{material::Material, math::Ray, prelude::*};
 
 pub struct HitData {
     pub uv: (Real, Real),
@@ -11,48 +11,23 @@ pub struct HitData {
     pub material: Arc<dyn Material>,
 }
 
-/// <'hit> lifetimes lives as long as a single pixel render takes.
-pub struct HitRecord<'hit> {
+pub struct HitRecord {
     pub t: Real,
     pub t_min: Real,
     pub depth: u16,
     pub ray: Ray,
     pub hit_data: Option<HitData>,
-
-    #[deprecated]
-    pub shape: Option<&'hit dyn crate::geometry::Shape>,
-    #[deprecated]
-    pub scene: &'hit Scene,
 }
 
-impl<'hit> HitRecord<'hit> {
-    pub fn new(ray: Ray, scene: &'hit Scene) -> Self {
+impl HitRecord {
+    pub fn new(ray: Ray) -> Self {
         Self {
             t: INFINITY,
             t_min: 0.001,
             depth: 0,
             ray,
             hit_data: None,
-            shape: None,
-            scene,
         }
-    }
-
-    pub fn to_light(to_light: Ray, scene: &'hit Scene) -> Self {
-        Self {
-            t: 1.0,
-            t_min: VERY_SMALL_NUMBER,
-            depth: 0,
-            ray: to_light,
-            hit_data: None,
-            shape: None,
-            scene,
-        }
-    }
-
-    #[inline(always)]
-    pub fn point(&self) -> P3 {
-        self.ray.point_at(self.t)
     }
 
     pub fn bounce(&self, outgoing: Ray) -> Self {
@@ -62,9 +37,12 @@ impl<'hit> HitRecord<'hit> {
             depth: self.depth + 1,
             ray: outgoing,
             hit_data: None,
-            shape: None,
-            scene: self.scene,
         }
+    }
+
+    #[inline(always)]
+    pub fn point(&self) -> P3 {
+        self.ray.point_at(self.t)
     }
 
     #[inline(always)]

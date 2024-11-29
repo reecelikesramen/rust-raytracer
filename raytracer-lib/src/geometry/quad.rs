@@ -1,7 +1,5 @@
 use na::Unit;
 
-use crate::material::DEFAULT_MATERIAL;
-
 use super::*;
 
 #[derive(Debug)]
@@ -11,18 +9,16 @@ pub struct Quad {
     v: V3,
     bbox: BBox,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Quad {
-    pub fn new(q: P3, u: V3, v: V3, material: Arc<dyn Material>, name: &'static str) -> Self {
+    pub fn new(q: P3, u: V3, v: V3, material: Arc<dyn Material>) -> Self {
         Self {
             q,
             u,
             v,
-            bbox: BBox::new(q, q + u + v),
+            bbox: BBox::from_points(&[q, q + u + v]),
             material,
-            name,
         }
     }
 }
@@ -36,7 +32,7 @@ impl Shape for Quad {
         self.bbox.centroid
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         use na::Matrix3;
 
         // Create the matrices for Cramer's rule
@@ -50,7 +46,7 @@ impl Shape for Quad {
         let det_a = matrix_a.determinant();
 
         // Early exit if determinant is too close to zero (parallel to triangle)
-        if det_a.abs() < Real::EPSILON {
+        if det_a.abs() < VERY_SMALL_NUMBER {
             return false;
         }
 
