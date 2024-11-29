@@ -1,3 +1,5 @@
+use crate::material::DEFAULT_MATERIAL;
+
 use super::*;
 use na::Unit;
 use std::sync::Arc;
@@ -7,33 +9,38 @@ pub struct Triangle {
     a: P3,
     b: P3,
     c: P3,
-    normal: V3,
+    normal_a: V3,
+    normal_b: V3,
+    normal_c: V3,
     bbox: BBox,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Triangle {
-    pub fn new(a: P3, b: P3, c: P3, material: Arc<dyn Material>, name: &'static str) -> Self {
+    pub fn new(a: P3, b: P3, c: P3, material: Arc<dyn Material>) -> Self {
         let normal = (b - a).cross(&(c - a)).normalize();
-        let min = P3::new(
-            a.x.min(b.x).min(c.x),
-            a.y.min(b.y).min(c.y),
-            a.z.min(b.z).min(c.z),
-        );
-        let max = P3::new(
-            a.x.max(b.x).max(c.x) + VERY_SMALL_NUMBER,
-            a.y.max(b.y).max(c.y) + VERY_SMALL_NUMBER,
-            a.z.max(b.z).max(c.z) + VERY_SMALL_NUMBER,
-        );
         Self {
             a,
             b,
             c,
-            normal,
-            bbox: BBox::new(min, max),
+            normal_a: normal,
+            normal_b: normal,
+            normal_c: normal,
+            bbox: BBox::from_points(&[a, b, c]),
             material,
-            name,
+        }
+    }
+
+    pub fn from_mesh(a: P3, b: P3, c: P3, normal_a: V3, normal_b: V3, normal_c: V3) -> Self {
+        Self {
+            a,
+            b,
+            c,
+            normal_a,
+            normal_b,
+            normal_c,
+            bbox: BBox::from_points(&[a, b, c]),
+            material: DEFAULT_MATERIAL.clone(),
         }
     }
 }
@@ -47,7 +54,7 @@ impl Shape for Triangle {
         P3::from((self.a.coords + self.b.coords + self.c.coords) / 3.0)
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         use na::Matrix3;
 
         // Create the matrices for Cramer's rule
@@ -61,7 +68,7 @@ impl Shape for Triangle {
         let det_a = matrix_a.determinant();
 
         // Early exit if determinant is too close to zero (parallel to triangle)
-        if det_a.abs() < Real::EPSILON {
+        if det_a.abs() < VERY_SMALL_NUMBER {
             return false;
         }
 
@@ -93,10 +100,13 @@ impl Shape for Triangle {
             return false;
         }
 
+        let normal =
+            (1.0 - beta - gamma) * self.normal_a + beta * self.normal_b + gamma * self.normal_c;
+
         // We have a valid hit, update the hit record
         hit_record.t = intersect_t;
         hit_record.set_hit_data(
-            Unit::new_unchecked(self.normal),
+            Unit::new_normalize(normal),
             (beta, gamma),
             self.material.clone(),
         );

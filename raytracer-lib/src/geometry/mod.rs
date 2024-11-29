@@ -1,4 +1,4 @@
-use crate::{hit_record::HitRecord, material::Material, prelude::*, shader::Shader};
+use crate::{hit_record::HitRecord, material::Material, prelude::*};
 
 use std::{fmt::Debug, sync::Arc};
 
@@ -23,5 +23,5 @@ pub use triangle::Triangle;
 pub trait Shape: Send + Sync + Debug {
     fn get_bbox(&self) -> &BBox;
     fn get_centroid(&self) -> P3;
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool;
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool;
 }

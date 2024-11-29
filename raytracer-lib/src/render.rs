@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use crate::antialias::{antialias, AntialiasMethod};
 use crate::hit_record::HitRecord;
-use crate::scene::Scene;
+use crate::scene::SceneGraph;
 use crate::Framebuffer;
 use crate::{color, prelude::*};
 
 pub fn render_pixel(
     fb: Arc<Framebuffer>,
-    scene: &Scene,
+    scene: &SceneGraph,
     sqrt_rays_per_pixel: u16,
     antialias_method: AntialiasMethod,
     i: u32,
@@ -19,7 +19,7 @@ pub fn render_pixel(
         for q in 0..sqrt_rays_per_pixel {
             let (di, dj) = antialias(antialias_method, sqrt_rays_per_pixel, p, q);
             let ray = scene.camera.generate_ray(i, j, di, dj);
-            let hit = HitRecord::new(ray, &scene);
+            let hit = HitRecord::new(ray);
 
             color += ray_color(&scene, hit);
         }
@@ -29,7 +29,7 @@ pub fn render_pixel(
     fb.set_pixel(i, j, color);
 }
 
-fn ray_color<'pixel>(scene: &'pixel Scene, mut hit: HitRecord<'pixel>) -> Color {
+fn ray_color(scene: &SceneGraph, mut hit: HitRecord) -> Color {
     if hit.depth >= scene.recursion_depth {
         return color!(0.0, 0.0, 0.0);
     }
@@ -39,10 +39,14 @@ fn ray_color<'pixel>(scene: &'pixel Scene, mut hit: HitRecord<'pixel>) -> Color 
         None => return scene.background_color,
     };
 
+    let color_emitted = hit_data.material.emitted(hit_data.uv, &hit.point());
+
     let (ray, attenuation) = match hit_data.material.scatter(&hit, &hit_data) {
         Some((r, a)) => (r, a),
-        None => return color!(0.0, 0.0, 0.0),
+        None => return color_emitted,
     };
 
-    attenuation.component_mul(&ray_color(&scene, hit.bounce(ray)))
+    let color_scattered = attenuation.component_mul(&ray_color(&scene, hit.bounce(ray)));
+
+    color_emitted + color_scattered
 }

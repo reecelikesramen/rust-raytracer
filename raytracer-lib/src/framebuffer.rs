@@ -42,6 +42,12 @@ impl Framebuffer {
         )
     }
 
+    pub fn get_pixels(&self) -> Vec<[f32; 3]> {
+        let pixels = self.pixels.read();
+
+        pixels.clone()
+    }
+
     // clear color - now thread safe
     pub fn clear_color(&self, color: Color) {
         let mut pixels = self.pixels.write();

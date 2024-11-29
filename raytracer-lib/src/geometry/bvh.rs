@@ -93,7 +93,7 @@ impl BVHNode {
         &self.bbox
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> bool {
+    pub fn closest_hit(&self, hit: &mut HitRecord) -> bool {
         // First check if ray intersects this node's bounding box
         if self.bbox.hit(&hit.ray, hit.t_min, hit.t).is_none() {
             return false;
@@ -140,11 +140,11 @@ impl BVH {
         }
     }
 
-    pub fn closest_hit<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> bool {
+    pub fn closest_hit(&self, hit: &mut HitRecord) -> bool {
         self.root.closest_hit(hit)
     }
 
-    pub fn get_closest_hit_data<'hit>(&'hit self, hit: &mut HitRecord<'hit>) -> Option<HitData> {
+    pub fn get_closest_hit_data(&self, hit: &mut HitRecord) -> Option<HitData> {
         self.closest_hit(hit);
         hit.hit_data.take()
     }

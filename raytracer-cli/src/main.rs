@@ -1,11 +1,12 @@
 mod output;
-use std::{path::Path, sync::Arc};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
+use indicatif::{ProgressBar, ProgressStyle};
 use output::save;
 
 use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
-use raytracer_lib::{parse_scene, public_consts, render_pixel, Framebuffer};
+use raytracer_lib::{public_consts, render_pixel, Framebuffer, SceneDescription, SceneGraph};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum AntialiasMethod {
@@ -45,26 +46,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(debug_assertions)]
     println!("{:?}", args);
 
-    // read scene path as string
-    let scene_path = Path::new(&args.scene_path);
-    let scene_json = std::fs::read_to_string(&scene_path)?;
-    let scene_root = scene_path.parent().unwrap().to_path_buf();
+    // Scene parsing spinner
+    let spinner = ProgressBar::new_spinner();
+    spinner.enable_steady_tick(Duration::from_millis(100)); // Spin every 100ms
+    spinner.set_style(
+        ProgressStyle::default_spinner()
+            .template("{spinner:.green} {msg}")
+            .unwrap(),
+    );
 
-    let fetch_data = move |path: &str| Ok(std::fs::read(scene_root.join(path))?);
+    // Load JSON into scene description
+    spinner.set_message("Loading JSON...");
+    let scene_json = std::fs::read_to_string(&args.scene_path)?;
+    let scene_desc = SceneDescription::from_json(&scene_json)?;
 
-    let scene = parse_scene(
-        &scene_json,
+    // Load scene data
+    spinner.set_message("Loading scene data...");
+    let scene_root = Path::new(&args.scene_path).parent().unwrap();
+    let mut scene_data: HashMap<String, Vec<u8>> = HashMap::new();
+    for relative_path in &scene_desc.data_needed {
+        let bytes = std::fs::read(scene_root.join(relative_path))?;
+        scene_data.insert(relative_path.clone(), bytes);
+    }
+
+    // Scene parsing
+    let scene = SceneGraph::from_description(
+        &scene_desc,
+        &scene_data,
         args.width,
         args.height,
         args.aspect_ratio,
         args.recursion_depth,
-        args.disable_shadows,
-        args.render_normals,
-        &fetch_data,
     )?;
 
     // #[cfg(debug_assertions)]
     // println!("{:#?}", scene);
+
+    spinner.finish_with_message("Scene parsing complete");
 
     let rays_per_pixel = args
         .rays_per_pixel
@@ -82,7 +100,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let width = scene.image_width;
     let height = scene.image_height;
     let pb = indicatif::ProgressBar::new((width * height) as u64);
-    pb.set_style(indicatif::ProgressStyle::default_bar().template("{wide_bar} {percent}% ")?);
+    pb.set_style(
+        indicatif::ProgressStyle::default_bar()
+            .template("{wide_bar} {percent}%\n[{elapsed_precise}] [{eta_precise}]")?,
+        // .template("Elapsed: {elapsed} Remaining: {eta}\n{wide_bar} {percent}%")?,
+    );
 
     let antialias_method = match args.antialias_method {
         Some(AntialiasMethod::Normal) => raytracer_lib::AntialiasMethod::Normal,
@@ -109,7 +131,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let framebuffer = match Arc::try_unwrap(framebuffer) {
-        Ok(fb) => fb,
+        Ok(it) => it,
         Err(_) => {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -119,73 +141,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     save(args.output_path.as_str(), framebuffer);
-    pb.finish_with_message("Render complete");
+    pb.finish_with_message("Rendering complete");
 
     Ok(())
-}
-
-pub fn split_image_into_grid(width: u32, height: u32, grid_size: u32) -> Vec<Vec<(u32, u32)>> {
-    let mut grid_cells = Vec::new();
-
-    let complete_cols = width / grid_size;
-    let complete_rows = height / grid_size;
-    let remainder_width = width % grid_size;
-    let remainder_height = height % grid_size;
-
-    // Pre-calculate capacity to avoid reallocations
-    let total_cells = (complete_cols + (remainder_width > 0) as u32)
-        * (complete_rows + (remainder_height > 0) as u32);
-    grid_cells.reserve_exact(total_cells as usize);
-
-    // Process complete grid cells
-    for row in 0..complete_rows {
-        for col in 0..complete_cols {
-            let mut cell = Vec::with_capacity((grid_size * grid_size) as usize);
-            for i in 0..grid_size {
-                for j in 0..grid_size {
-                    cell.push((col * grid_size + j, row * grid_size + i));
-                }
-            }
-            grid_cells.push(cell);
-        }
-    }
-
-    // Process right edge
-    if remainder_width > 0 {
-        for row in 0..complete_rows {
-            let mut cell = Vec::with_capacity((grid_size * remainder_width) as usize);
-            for i in 0..grid_size {
-                for j in 0..remainder_width {
-                    cell.push((complete_cols * grid_size + j, row * grid_size + i));
-                }
-            }
-            grid_cells.push(cell);
-        }
-    }
-
-    // Process bottom edge
-    if remainder_height > 0 {
-        for col in 0..complete_cols {
-            let mut cell = Vec::with_capacity((remainder_height * grid_size) as usize);
-            for i in 0..remainder_height {
-                for j in 0..grid_size {
-                    cell.push((col * grid_size + j, complete_rows * grid_size + i));
-                }
-            }
-            grid_cells.push(cell);
-        }
-    }
-
-    // Process bottom-right corner
-    if remainder_width > 0 && remainder_height > 0 {
-        let mut cell = Vec::with_capacity((remainder_height * remainder_width) as usize);
-        for i in 0..remainder_height {
-            for j in 0..remainder_width {
-                cell.push((complete_cols * grid_size + j, complete_rows * grid_size + i));
-            }
-        }
-        grid_cells.push(cell);
-    }
-
-    grid_cells
 }

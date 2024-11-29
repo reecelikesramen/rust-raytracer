@@ -1,16 +1,15 @@
 use super::*;
-use tobj::{load_obj, Model};
+use tobj::Model;
 
 #[derive(Debug)]
 pub struct Mesh {
     bvh: BVH,
     bbox: BBox,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Mesh {
-    pub fn new(model: Model, material: Arc<dyn Material>, name: &'static str) -> Self {
+    pub fn new(model: Model, material: Arc<dyn Material>) -> Self {
         let positions = model
             .mesh
             .positions
@@ -27,7 +26,6 @@ impl Mesh {
                     positions[i[1] as usize],
                     positions[i[2] as usize],
                     material.clone(),
-                    name,
                 )) as Arc<dyn Shape>
             })
             .collect::<Vec<Arc<dyn Shape>>>();
@@ -37,7 +35,6 @@ impl Mesh {
             bvh,
             bbox,
             material,
-            name,
         }
     }
 }
@@ -51,7 +48,21 @@ impl Shape for Mesh {
         self.bbox.centroid
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
-        self.bvh.closest_hit(hit_record)
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
+        let did_hit = self.bvh.closest_hit(hit_record);
+
+        // Return false if no intersection
+        if !did_hit {
+            return false;
+        }
+
+        // Set the material
+        hit_record
+            .hit_data
+            .as_mut()
+            .expect("Hit record should have hit data")
+            .material = self.material.clone();
+
+        true
     }
 }

@@ -22,6 +22,12 @@ pub type P3 = na::Point3<Real>;
 #[derive(Debug)]
 pub struct W<T>(pub T);
 
+/// Alias for errors
+pub type Error = Box<dyn std::error::Error>;
+
+/// Alias for results
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[macro_export]
 macro_rules! color {
     ($x:expr, $y:expr, $z:expr) => {

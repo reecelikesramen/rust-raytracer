@@ -11,5 +11,5 @@ pub use image::ImageTexture;
 pub use solid_color::SolidColor;
 
 pub trait Texture: Send + Sync + Debug {
-    fn color(&self, uv: (Real, Real), p: &P3) -> Color;
+    fn color(&self, uv: (Real, Real), point: &P3) -> Color;
 }

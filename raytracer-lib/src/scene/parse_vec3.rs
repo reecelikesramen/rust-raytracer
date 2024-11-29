@@ -8,6 +8,8 @@ use serde::{
     Deserialize, Deserializer, Serialize, Serializer,
 };
 
+use std::result::Result;
+
 impl<'de, T> Deserialize<'de> for W<Vector3<T>>
 where
     T: Scalar + FromStr + Deserialize<'de>,

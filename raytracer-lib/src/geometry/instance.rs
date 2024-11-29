@@ -8,9 +8,7 @@ pub struct Instance {
     inv_transform: Matrix4<Real>,
     normal_matrix: Matrix4<Real>,
     bbox: BBox,
-    shader: Arc<dyn Shader>,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Instance {
@@ -19,19 +17,14 @@ impl Instance {
         translation: Translation3<Real>,
         rotation: Rotation3<Real>,
         scale: Scale3<Real>,
-        shader: Arc<dyn Shader>,
         material: Arc<dyn Material>,
-        name: &'static str,
     ) -> Self {
         let transform =
             translation.to_homogeneous() * rotation.to_homogeneous() * scale.to_homogeneous();
         let inv_rotate = rotation.inverse().to_homogeneous();
         let inv_scale = scale
             .try_inverse()
-            .expect(&format!(
-                "The scaling applied to {} is not invertible",
-                name
-            ))
+            .expect("The scaling applied is not invertible")
             .to_homogeneous();
         let inv_transform = inv_scale * inv_rotate * translation.inverse().to_homogeneous();
         let normal_matrix = (inv_scale * inv_rotate).transpose();
@@ -42,9 +35,7 @@ impl Instance {
             inv_transform,
             normal_matrix,
             bbox,
-            shader,
             material,
-            name,
         }
     }
 }
@@ -58,7 +49,7 @@ impl Shape for Instance {
         self.bbox.centroid
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         let og_ray = hit_record.ray;
         let transformed_ray = crate::math::Ray {
             origin: self.inv_transform.transform_point(&og_ray.origin),

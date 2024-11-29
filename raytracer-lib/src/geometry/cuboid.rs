@@ -5,24 +5,14 @@ use super::*;
 #[derive(Debug)]
 pub struct Cuboid {
     bbox: BBox,
-    shader: Arc<dyn Shader>,
     material: Arc<dyn Material>,
-    name: &'static str,
 }
 
 impl Cuboid {
-    pub fn new(
-        min: P3,
-        max: P3,
-        shader: Arc<dyn Shader>,
-        material: Arc<dyn Material>,
-        name: &'static str,
-    ) -> Self {
+    pub fn new(min: P3, max: P3, material: Arc<dyn Material>) -> Self {
         Self {
             bbox: BBox::new(min, max),
-            shader,
             material,
-            name,
         }
     }
 
@@ -53,7 +43,7 @@ impl Shape for Cuboid {
         self.bbox.centroid
     }
 
-    fn closest_hit<'hit>(&'hit self, hit_record: &mut HitRecord<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         if let Some(t) = self
             .bbox
             .hit(&hit_record.ray, hit_record.t_min, hit_record.t)
