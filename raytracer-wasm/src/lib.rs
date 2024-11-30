@@ -51,6 +51,7 @@ pub struct RayTracer {
     antialias_method: raytracer_lib::AntialiasMethod,
     next_pixel: (u32, u32),
     pub complete: bool,
+    columns: Vec<u32>,
     context: WebGl2RenderingContext,
 }
 
@@ -88,10 +89,9 @@ impl RayTracer {
                 _ => raytracer_lib::AntialiasMethod::Normal,
             };
 
+            // Set up WebGL2
             canvas.set_width(args.width);
             canvas.set_height(args.height);
-
-            // Set up WebGL2
             let context = {
                 #[cfg(debug_assertions)]
                 test_webgl2()?;
@@ -152,7 +152,7 @@ impl RayTracer {
             in vec2 texCoord;
             out vec4 fragColor;
             void main() {
-                V3 color = texture(tex, texCoord).rgb;
+                vec3 color = texture(tex, texCoord).rgb;
                 fragColor = vec4(color, 1.0);
             }
             "#,
@@ -192,6 +192,9 @@ impl RayTracer {
                 context
             };
 
+            // Set up columns
+            let columns: Vec<u32> = (0..args.width).collect();
+
             // fetch data from IndexedDB
             let mut scene_data: HashMap<String, Vec<u8>> = HashMap::new();
             for relative_path in &scene_desc.data_needed {
@@ -216,6 +219,7 @@ impl RayTracer {
                 antialias_method,
                 next_pixel: (0, 0),
                 complete: false,
+                columns,
                 context,
             }))
         })
@@ -262,6 +266,30 @@ impl RayTracer {
         };
 
         Promise::resolve(&JsValue::from_f64(total_pixels))
+    }
+
+    #[wasm_bindgen]
+    pub fn raytrace_next_column(&mut self) -> Promise {
+        let column = match self.columns.pop() {
+            Some(column) => column,
+            None => {
+                self.complete = true;
+                return Promise::resolve(&JsValue::from_str("no columns"));
+            }
+        };
+
+        for j in 0..self.scene.image_height {
+            render_pixel(
+                self.fb.clone(),
+                &self.scene,
+                self.sqrt_rays_per_pixel,
+                self.antialias_method,
+                column,
+                j,
+            );
+        }
+
+        Promise::resolve(&JsValue::undefined())
     }
 
     #[wasm_bindgen]
