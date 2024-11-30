@@ -43,6 +43,37 @@ async function runChunkedProcessingWithRAF(processor) {
   })
 }
 
+function workerProcessing(raytracer) {
+  return new Promise((resolve) => {
+    // spawn workers, 1 less than hardware concurrency cores
+    let workers = navigator.hardwareConcurrency - 1
+    for (let i = 0; i < workers; i++) {
+      let worker = new Worker(new URL("./worker.js", import.meta.url))
+      worker.onmessage = (e) => {
+        if (e.data == "ready") {
+          console.log("worker", i, "ready")
+          worker.postMessage(["render"])
+        } else if (e.data == "done") {
+          console.log("worker", i, "done")
+          worker.terminate()
+          worker = null
+          workers -= 1
+        }
+      }
+      worker.postMessage(["raytracer", raytracer.raytrace_next_column])
+    }
+    console.log(workers, "total workers")
+
+    let interval = setInterval(() => {
+      console.log(workers, "workers left")
+      if (workers == 0) {
+        clearInterval(interval)
+        return resolve()
+      }
+    }, 100)
+  })
+}
+
 let render_to_canvas_id
 
 /**
@@ -77,19 +108,19 @@ async function run() {
   await init()
 
   const width = 800
-  const height = 600
+  const height = 800
 
   const canvas = document.getElementById("canvas")
-  canvas.style.width = "800px"
+  canvas.style.width = "600px"
   canvas.style.height = "600px"
 
   // Fetch ./scenes/sphere_scene.json into a string
-  const scene_json = await fetch("./scenes/spheres_1K.json").then((r) => r.text())
+  const scene_json = await fetch("./scenes/spheres_1K_new.json").then((r) => r.text())
 
   const scene_args = {
     width,
     height,
-    rays_per_pixel: 4,
+    rays_per_pixel: 100,
   }
 
   // on key press k clear the canvas to black includign quads and textures and whatnot
@@ -103,14 +134,16 @@ async function run() {
 
   // Example of calling your WASM function
   try {
-    const raytracer = new RayTracer("canvas", scene_json, scene_args)
+    const raytracer = await RayTracer.init("canvas", scene_json, scene_args)
 
     console.log("Starting raytrace...")
     const date_start = performance.now()
     start_render_to_canvas(raytracer)
-    await runChunkedProcessingWithRAF(raytracer)
+    // multi threaded worker processing
+    await workerProcessing(raytracer)
+    // single threaded
+    // await runChunkedProcessingWithRAF(raytracer)
     stop_render_to_canvas()
-    // renderer.raytrace_blocking()
     const time_elapsed = performance.now() - date_start
     console.log("Raytraced the scene in", time_elapsed.toFixed(2), "ms!")
   } catch (e) {
