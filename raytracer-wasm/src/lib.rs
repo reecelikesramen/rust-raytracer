@@ -1,6 +1,8 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use js_sys::{Float32Array, JsString, Promise};
+pub use wasm_bindgen_rayon::init_thread_pool;
+use rayon::prelude::*;
 use raytracer_lib::{public_consts, render_pixel, Framebuffer, Real, SceneDescription, SceneGraph};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -269,26 +271,23 @@ impl RayTracer {
     }
 
     #[wasm_bindgen]
-    pub fn raytrace_next_column(&mut self) -> Promise {
-        let column = match self.columns.pop() {
-            Some(column) => column,
-            None => {
-                self.complete = true;
-                return Promise::resolve(&JsValue::from_str("no columns"));
+    pub fn raytrace_parallel(&mut self) -> Promise {
+        let columns: Vec<u32> = self.columns.drain(..).collect();
+        
+        columns.par_iter().for_each(|&column| {
+            for j in 0..self.scene.image_height {
+                render_pixel(
+                    self.fb.clone(),
+                    &self.scene,
+                    self.sqrt_rays_per_pixel,
+                    self.antialias_method,
+                    column,
+                    j,
+                );
             }
-        };
+        });
 
-        for j in 0..self.scene.image_height {
-            render_pixel(
-                self.fb.clone(),
-                &self.scene,
-                self.sqrt_rays_per_pixel,
-                self.antialias_method,
-                column,
-                j,
-            );
-        }
-
+        self.complete = true;
         Promise::resolve(&JsValue::undefined())
     }
 
