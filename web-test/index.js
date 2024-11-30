@@ -1,4 +1,4 @@
-import init, { RayTracer } from "./pkg/raytracer_wasm.js"
+import init, { RayTracer, initThreadPool } from "./pkg/raytracer_wasm.js"
 
 /**
  *
@@ -106,6 +106,9 @@ function stop_render_to_canvas() {
 async function run() {
   // Initialize the WASM module
   await init()
+  
+  // Initialize thread pool with all cores except one
+  await initThreadPool(navigator.hardwareConcurrency - 1)
 
   const width = 800
   const height = 800
@@ -139,10 +142,8 @@ async function run() {
     console.log("Starting raytrace...")
     const date_start = performance.now()
     start_render_to_canvas(raytracer)
-    // multi threaded worker processing
-    await workerProcessing(raytracer)
-    // single threaded
-    // await runChunkedProcessingWithRAF(raytracer)
+    // parallel processing using rayon
+    await raytracer.raytrace_parallel()
     stop_render_to_canvas()
     const time_elapsed = performance.now() - date_start
     console.log("Raytraced the scene in", time_elapsed.toFixed(2), "ms!")
