@@ -12,6 +12,7 @@ cd raytracer-wasm
 wasm-pack build --target web --out-dir ../web-test/pkg --release
 cd ../web-test
 python -m http.server
+cd ..
 ```
 Open http://localhost:8000
 
