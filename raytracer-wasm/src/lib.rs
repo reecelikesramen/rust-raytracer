@@ -56,15 +56,6 @@ pub struct RayTracer {
 #[wasm_bindgen]
 impl RayTracer {
     #[wasm_bindgen]
-    pub fn test_rayon(&self) -> Promise {
-        // par iter a sum of (0..1000)
-        let sum = (0..1000000).into_par_iter().sum::<i32>();
-        log!("FROM WASM> Sum: {}", sum);
-
-        Promise::resolve(&JsValue::from_f64(sum as f64))
-    }
-
-    #[wasm_bindgen]
     pub fn init(canvas_id: String, scene_json: String, raytracer_args: JsValue) -> Promise {
         future_to_promise(async move {
             let document = web_sys::window().unwrap().document().unwrap();
@@ -273,21 +264,37 @@ impl RayTracer {
 
     #[wasm_bindgen]
     pub fn raytrace_parallel(&mut self) -> Promise {
-        (0..self.scene.image_width).into_par_iter().for_each(|i| {
-            for j in 0..self.scene.image_height {
-                render_pixel(
-                    self.fb.clone(),
-                    &self.scene,
-                    self.sqrt_rays_per_pixel,
-                    self.antialias_method,
-                    i,
-                    j,
-                );
-            }
+        let result = std::panic::catch_unwind(|| {
+            (0..self.scene.image_width).into_par_iter().for_each(|i| {
+                for j in 0..self.scene.image_height {
+                    render_pixel(
+                        self.fb.clone(),
+                        &self.scene,
+                        self.sqrt_rays_per_pixel,
+                        self.antialias_method,
+                        i,
+                        j,
+                    );
+                }
+            });
         });
 
-        self.complete = true;
-        Promise::resolve(&JsValue::undefined())
+        match result {
+            Ok(_) => {
+                self.complete = true;
+                Promise::resolve(&JsValue::undefined())
+            }
+            Err(e) => {
+                let error_msg = if let Some(s) = e.downcast_ref::<String>() {
+                    s.clone()
+                } else if let Some(s) = e.downcast_ref::<&str>() {
+                    s.to_string()
+                } else {
+                    "Unknown panic occurred".to_string()
+                };
+                Promise::reject(&JsValue::from_str(&error_msg))
+            }
+        }
     }
 
     #[wasm_bindgen]
