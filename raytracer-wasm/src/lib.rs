@@ -1,7 +1,6 @@
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use js_sys::{Float32Array, JsString, Promise};
-pub use wasm_bindgen_rayon::init_thread_pool;
 use rayon::prelude::*;
 use raytracer_lib::{public_consts, render_pixel, Framebuffer, Real, SceneDescription, SceneGraph};
 use serde::Deserialize;
@@ -11,6 +10,8 @@ use web_sys::{
     Request, RequestInit, RequestMode, Response, WebGl2RenderingContext, WebGlContextAttributes,
     WebGlProgram, WebGlShader,
 };
+
+pub use wasm_bindgen_rayon::init_thread_pool;
 
 fn js_to_err(err: JsValue) -> Box<dyn std::error::Error> {
     JsString::from(err).as_string().unwrap().into()
@@ -31,10 +32,6 @@ pub struct RayTracerArgs {
     #[serde(default)]
     aspect_ratio: Option<Real>,
     #[serde(default)]
-    disable_shadows: bool,
-    #[serde(default)]
-    render_normals: bool,
-    #[serde(default)]
     antialias_method: Option<String>,
 }
 
@@ -53,12 +50,20 @@ pub struct RayTracer {
     antialias_method: raytracer_lib::AntialiasMethod,
     next_pixel: (u32, u32),
     pub complete: bool,
-    columns: Vec<u32>,
     context: WebGl2RenderingContext,
 }
 
 #[wasm_bindgen]
 impl RayTracer {
+    #[wasm_bindgen]
+    pub fn test_rayon(&self) -> Promise {
+        // par iter a sum of (0..1000)
+        let sum = (0..1000000).into_par_iter().sum::<i32>();
+        log!("FROM WASM> Sum: {}", sum);
+
+        Promise::resolve(&JsValue::from_f64(sum as f64))
+    }
+
     #[wasm_bindgen]
     pub fn init(canvas_id: String, scene_json: String, raytracer_args: JsValue) -> Promise {
         future_to_promise(async move {
@@ -194,9 +199,6 @@ impl RayTracer {
                 context
             };
 
-            // Set up columns
-            let columns: Vec<u32> = (0..args.width).collect();
-
             // fetch data from IndexedDB
             let mut scene_data: HashMap<String, Vec<u8>> = HashMap::new();
             for relative_path in &scene_desc.data_needed {
@@ -221,7 +223,6 @@ impl RayTracer {
                 antialias_method,
                 next_pixel: (0, 0),
                 complete: false,
-                columns,
                 context,
             }))
         })
@@ -272,16 +273,14 @@ impl RayTracer {
 
     #[wasm_bindgen]
     pub fn raytrace_parallel(&mut self) -> Promise {
-        let columns: Vec<u32> = self.columns.drain(..).collect();
-        
-        columns.par_iter().for_each(|&column| {
+        (0..self.scene.image_width).into_par_iter().for_each(|i| {
             for j in 0..self.scene.image_height {
                 render_pixel(
                     self.fb.clone(),
                     &self.scene,
                     self.sqrt_rays_per_pixel,
                     self.antialias_method,
-                    column,
+                    i,
                     j,
                 );
             }
