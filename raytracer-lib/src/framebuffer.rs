@@ -46,10 +46,8 @@ impl Framebuffer {
         }
     }
 
-    pub fn get_pixels(&self) -> Vec<[f32; 3]> {
-        self.pixels.read()
-            .map(|pixels| pixels.clone())
-            .unwrap_or_else(|_| vec![[0.0, 0.0, 0.0]; (self.width * self.height) as usize])
+    pub fn get_pixels(&self) -> std::sync::RwLockReadGuard<Vec<[f32; 3]>> {
+        self.pixels.read().expect("Failed to acquire read lock")
     }
 
     // clear color - thread safe
