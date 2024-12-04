@@ -307,9 +307,10 @@ impl RayTracer {
 
         unsafe {
             // Upload pixels to texture
+            let pixels_guard = self.fb.get_pixels();
             let pixels: &[f32] = std::slice::from_raw_parts(
-                self.fb.get_pixels().as_ptr() as *const f32,
-                self.fb.get_pixels().len() * 3,
+                pixels_guard.as_ptr() as *const f32,
+                pixels_guard.len() * 3,
             );
 
             let pixels_array = Float32Array::view(pixels);
