@@ -264,37 +264,23 @@ impl RayTracer {
 
     #[wasm_bindgen]
     pub fn raytrace_parallel(&mut self) -> Promise {
-        let result = std::panic::catch_unwind(|| {
-            (0..self.scene.image_width).into_par_iter().for_each(|i| {
-                for j in 0..self.scene.image_height {
-                    render_pixel(
-                        self.fb.clone(),
-                        &self.scene,
-                        self.sqrt_rays_per_pixel,
-                        self.antialias_method,
-                        i,
-                        j,
-                    );
-                }
-            });
+        console_error_panic_hook::set_once();
+
+        let fb = self.fb.clone();
+        let scene = &self.scene;
+        let width = scene.image_width;
+        let height = scene.image_height;
+        let sqrt_rays = self.sqrt_rays_per_pixel;
+        let aa_method = self.antialias_method;
+
+        (0..width).into_par_iter().for_each(move |i| {
+            for j in 0..height {
+                render_pixel(fb.clone(), scene, sqrt_rays, aa_method, i, j);
+            }
         });
 
-        match result {
-            Ok(_) => {
-                self.complete = true;
-                Promise::resolve(&JsValue::undefined())
-            }
-            Err(e) => {
-                let error_msg = if let Some(s) = e.downcast_ref::<String>() {
-                    s.clone()
-                } else if let Some(s) = e.downcast_ref::<&str>() {
-                    s.to_string()
-                } else {
-                    "Unknown panic occurred".to_string()
-                };
-                Promise::reject(&JsValue::from_str(&error_msg))
-            }
-        }
+        self.complete = true;
+        Promise::resolve(&JsValue::undefined())
     }
 
     #[wasm_bindgen]
