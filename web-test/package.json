@@ -2,8 +2,8 @@
   "private": true,
   "scripts": {
     "test": "wasm-pack --version",
-    "build:wasm": "wasm-pack build --target web --out-dir ../web-test/pkg ../raytracer-wasm",
-    "build:web": "webpack build ./index.js --mode development -o dist --output-filename index.js && shx cp -r index.html serve.json scenes textures dist/",
+    "build:wasm": "wasm-pack build --release --target web --out-dir ../web-test/pkg ../raytracer-wasm",
+    "build:web": "webpack build ./index.js --mode production -o dist --output-filename index.js && shx cp -r index.html serve.json scenes textures dist/",
     "build": "npm run build:wasm && npm run build:web",
     "serve": "serve dist"
   },

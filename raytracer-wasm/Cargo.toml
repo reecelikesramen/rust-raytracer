@@ -32,6 +32,7 @@ futures = "0.3.31"
 wasm-bindgen-futures = ">=0.4.43"
 wasm-bindgen-rayon = "1.2.2"
 rayon = { version = "1.8.1", features = ["web_spin_lock"] }
+console_error_panic_hook = "0.1.7"
 
 [lib]
 crate-type = ["rlib", "cdylib"]  # To enable usage as a library in WASM

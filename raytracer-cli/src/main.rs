@@ -102,8 +102,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pb = indicatif::ProgressBar::new((width * height) as u64);
     pb.set_style(
         indicatif::ProgressStyle::default_bar()
-            .template("{wide_bar} {percent}%\n[{elapsed_precise}] [{eta_precise}]")?,
-        // .template("Elapsed: {elapsed} Remaining: {eta}\n{wide_bar} {percent}%")?,
+            .template("{wide_bar} {percent}%\nElapsed: {elapsed} Remaining: {eta}")?,
     );
 
     let antialias_method = match args.antialias_method {

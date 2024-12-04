@@ -264,6 +264,7 @@ impl RayTracer {
 
     #[wasm_bindgen]
     pub fn raytrace_parallel(&mut self) -> Promise {
+        #[cfg(debug_assertions)]
         console_error_panic_hook::set_once();
 
         let fb = self.fb.clone();
@@ -308,10 +309,18 @@ impl RayTracer {
         unsafe {
             // Upload pixels to texture
             let pixels_guard = self.fb.get_pixels();
-            let pixels: &[f32] = std::slice::from_raw_parts(
-                pixels_guard.as_ptr() as *const f32,
-                pixels_guard.len() * 3,
-            );
+            // convert to sRGB space
+            let pixels: Vec<[f32; 3]> = pixels_guard
+                .iter()
+                .map(|pixel| {
+                    let r = pixel[0].powf(1. / 2.2);
+                    let g = pixel[1].powf(1. / 2.2);
+                    let b = pixel[2].powf(1. / 2.2);
+                    [r, g, b]
+                })
+                .collect();
+            let pixels: &[f32] =
+                std::slice::from_raw_parts(pixels.as_ptr() as *const f32, pixels.len() * 3);
 
             let pixels_array = Float32Array::view(pixels);
             self.context
