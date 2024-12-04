@@ -1,5 +1,5 @@
 use crate::{color, prelude::*};
-use parking_lot::RwLock;
+use std::sync::RwLock;
 
 pub struct Framebuffer {
     width: u32,
@@ -22,39 +22,44 @@ impl Framebuffer {
         (i + j * self.width) as usize
     }
 
-    // set pixel - now thread safe
+    // set pixel - thread safe
     pub fn set_pixel(&self, i: u32, j: u32, color: Color) {
         let idx = self.index(i, j);
-        let mut pixels = self.pixels.write();
-        pixels[idx][0] = color[0];
-        pixels[idx][1] = color[1];
-        pixels[idx][2] = color[2];
+        if let Ok(mut pixels) = self.pixels.write() {
+            pixels[idx][0] = color[0];
+            pixels[idx][1] = color[1];
+            pixels[idx][2] = color[2];
+        }
     }
 
-    // get pixel - now thread safe
+    // get pixel - thread safe
     pub fn get_pixel(&self, i: u32, j: u32) -> Color {
         let idx = self.index(i, j);
-        let pixels = self.pixels.read();
-        color!(
-            pixels[idx][0],
-            pixels[idx][1],
-            pixels[idx][2]
-        )
+        if let Ok(pixels) = self.pixels.read() {
+            color!(
+                pixels[idx][0],
+                pixels[idx][1],
+                pixels[idx][2]
+            )
+        } else {
+            color!(0.0, 0.0, 0.0) // fallback in case of lock poisoning
+        }
     }
 
     pub fn get_pixels(&self) -> Vec<[f32; 3]> {
-        let pixels = self.pixels.read();
-
-        pixels.clone()
+        self.pixels.read()
+            .map(|pixels| pixels.clone())
+            .unwrap_or_else(|_| vec![[0.0, 0.0, 0.0]; (self.width * self.height) as usize])
     }
 
-    // clear color - now thread safe
+    // clear color - thread safe
     pub fn clear_color(&self, color: Color) {
-        let mut pixels = self.pixels.write();
-        for pixel in pixels.iter_mut() {
-            pixel[0] = color[0];
-            pixel[1] = color[1];
-            pixel[2] = color[2];
+        if let Ok(mut pixels) = self.pixels.write() {
+            for pixel in pixels.iter_mut() {
+                pixel[0] = color[0];
+                pixel[1] = color[1];
+                pixel[2] = color[2];
+            }
         }
     }
 
@@ -66,6 +71,7 @@ impl Framebuffer {
     // Get raw pixels for final output
     pub fn into_raw(self) -> Vec<[f32; 3]> {
         self.pixels.into_inner()
+            .unwrap_or_else(|_| vec![[0.0, 0.0, 0.0]; (self.width * self.height) as usize])
     }
 
     // Create framebuffer from raw pixels
