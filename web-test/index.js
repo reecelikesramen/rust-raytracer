@@ -73,7 +73,11 @@ function stop_render_to_canvas() {
   cancelAnimationFrame(render_to_canvas_id)
 }
 
+let start = false
+
 ;(async function run() {
+  Error.stackTraceLimit = 30
+
   // Initialize the WASM module
   await init()
 
@@ -84,33 +88,23 @@ function stop_render_to_canvas() {
     return
   }
 
-  // Initialize thread pool with all cores except one
-  await initThreadPool(2)
+  await initThreadPool(navigator.hardwareConcurrency)
 
-  const width = 200
-  const height = 200
+  const width = 600
+  const height = 600
 
   const canvas = document.getElementById("canvas")
   canvas.style.width = "600px"
   canvas.style.height = "600px"
 
   // Fetch ./scenes/sphere_scene.json into a string
-  const scene_json = await fetch("./scenes/spheres_1K_new.json").then((r) => r.text())
+  const scene_json = await fetch("./scenes/spheres.json").then((r) => r.text())
 
   const scene_args = {
     width,
     height,
-    rays_per_pixel: 1,
+    rays_per_pixel: 100,
   }
-
-  // // on key press k clear the canvas to black includign quads and textures and whatnot
-  // document.addEventListener("keydown", (e) => {
-  //   if (e.key == "k") {
-  //     const gl = document.getElementById("canvas").getContext("webgl2")
-  //     gl.clearColor(0.0, 0.0, 0.0, 1.0) // Set clear color to black
-  //     gl.clear(gl.COLOR_BUFFER_BIT) // Clear the canvas with the clear color
-  //   }
-  // })
 
   try {
     const raytracer = await RayTracer.init("canvas", scene_json, scene_args)
@@ -125,9 +119,9 @@ function stop_render_to_canvas() {
     // parallel processing using rayon
     console.log("Starting raytrace...")
     const date_start = performance.now()
-    // await raytracer.raytrace_parallel()
-    let i = await raytracer.test_rayon()
-    console.log(i)
+    await raytracer.raytrace_parallel()
+    // let i = await raytracer.test_rayon()
+    // console.log(i)
 
     // stop periodic rendering
     stop_render_to_canvas()
