@@ -91,10 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // error if rays_per_pixel is not a perfect square
     if sqrt_rays_per_pixel * sqrt_rays_per_pixel != rays_per_pixel {
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "rays_per_pixel must be a perfect square",
-        )));
+        return "rays_per_pixel must be a perfect square".into();
     }
 
     let width = scene.image_width;
@@ -130,18 +127,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    let framebuffer = match Arc::try_unwrap(framebuffer) {
-        Ok(it) => it,
-        Err(_) => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "failed to unwrap framebuffer after render",
-            )))
-        }
-    };
+    let framebuffer = Arc::try_unwrap(framebuffer).map_err(|_| "Failed to unwrap framebuffer")?;
 
-    save(args.output_path.as_str(), framebuffer);
     pb.finish_with_message("Rendering complete");
+    save(args.output_path.as_str(), framebuffer)?;
 
     Ok(())
 }

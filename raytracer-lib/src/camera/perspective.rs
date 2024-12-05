@@ -66,8 +66,16 @@ impl PerspectiveCamera {
 }
 
 impl Camera for PerspectiveCamera {
-    fn generate_ray(&self, i: u32, j: u32, di: Real, dj: Real) -> Ray {
-        let (u, v) = self.base.get_uv(i, j, di, dj);
+    fn generate_ray(
+        &self,
+        i: u32,
+        j: u32,
+        di: Real,
+        dj: Real,
+        pixels_x: u32,
+        pixels_y: u32,
+    ) -> Ray {
+        let (u, v) = self.base.get_uv(i, j, di, dj, pixels_x, pixels_y);
 
         // Calculate the point on the viewport
         let viewport_point = self.base.basis.u * u + self.base.basis.v * v;

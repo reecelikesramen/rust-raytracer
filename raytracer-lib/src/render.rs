@@ -18,15 +18,18 @@ pub fn render_pixel(
     for p in 0..sqrt_rays_per_pixel {
         for q in 0..sqrt_rays_per_pixel {
             let (di, dj) = antialias(antialias_method, sqrt_rays_per_pixel, p, q);
-            let ray = scene.camera.generate_ray(i, j, di, dj);
+            let ray = scene.camera.generate_ray(i, j, di, dj, fb.width, fb.height);
             let hit = HitRecord::new(ray);
 
             color += ray_color(&scene, hit);
         }
     }
+    
     // divide by number of samples
-    color /= (sqrt_rays_per_pixel * sqrt_rays_per_pixel) as f32;
-    fb.set_pixel(i, j, color);
+    // color /= (sqrt_rays_per_pixel * sqrt_rays_per_pixel) as f32;
+    // fb.set_pixel(i, j, color);
+    let samples = sqrt_rays_per_pixel as u32 * sqrt_rays_per_pixel as u32;
+    fb.add_samples(i, j, color, samples);
 }
 
 fn ray_color(scene: &SceneGraph, mut hit: HitRecord) -> Color {
