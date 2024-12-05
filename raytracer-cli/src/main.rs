@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // error if rays_per_pixel is not a perfect square
     if sqrt_rays_per_pixel * sqrt_rays_per_pixel != rays_per_pixel {
-        return "rays_per_pixel must be a perfect square".into();
+        return Err("rays_per_pixel must be a perfect square".into());
     }
 
     let width = scene.image_width;
