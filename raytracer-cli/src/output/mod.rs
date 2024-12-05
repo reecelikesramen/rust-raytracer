@@ -1,34 +1,29 @@
-mod png_export;
-
-use self::png_export::save_to_png;
+use image::{DynamicImage, Rgb32FImage};
 use raytracer_lib::Framebuffer;
-use std::path::Path;
 
-pub(crate) fn save(output_path: &str, fb: Framebuffer) {
+pub(crate) fn save(output_path: &str, fb: Framebuffer) -> Result<(), Box<dyn std::error::Error>> {
+    let mut image_buffer = Rgb32FImage::new(fb.width, fb.height);
+
     const GAMMA: f32 = 2.2;
-    // Get raw pixels and convert from linear to sRGB gamma space
-    let dimensions = fb.dimensions();
-    let pixels = fb
-        .into_raw()
+    // Get output pixels and convert from linear to sRGB gamma space
+    fb.get_pixels()
         .into_iter()
         .map(|pixel| {
-            [
-                pixel[0].powf(1.0 / GAMMA),
-                pixel[1].powf(1.0 / GAMMA),
-                pixel[2].powf(1.0 / GAMMA),
-            ]
+            let r = pixel[0].clamp(0., 1.).powf(1.0 / GAMMA);
+            let g = pixel[1].clamp(0., 1.).powf(1.0 / GAMMA);
+            let b = pixel[2].clamp(0., 1.).powf(1.0 / GAMMA);
+            [r, g, b]
         })
-        .collect::<Vec<_>>();
+        .enumerate()
+        .for_each(|(idx, pixel)| {
+            let x = idx as u32 % fb.width;
+            let y = fb.width - 1 - idx as u32 / fb.width;
+            image_buffer.put_pixel(x, y, pixel.into());
+        });
 
-    let fb = Framebuffer::from_raw(dimensions.0, dimensions.1, pixels);
+    DynamicImage::from(image_buffer)
+        .into_rgb16()
+        .save(output_path)?;
 
-    if let Some(ext) = Path::new(output_path).extension() {
-        if let Some(ext) = ext.to_str() {
-            if ext == "png" {
-                save_to_png(output_path, &fb);
-            } else {
-                unimplemented!("The format '{}' is not supported", ext)
-            }
-        }
-    }
+    Ok(())
 }

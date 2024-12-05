@@ -573,9 +573,6 @@ impl SceneGraph {
             }
         };
 
-        // Set image size
-        camera.set_image_pixels(image_width, image_height);
-
         // Create textures
         let mut textures: HashMap<String, Arc<Rgb32FImage>> = HashMap::new();
         for texture_data in &scene.textures {
