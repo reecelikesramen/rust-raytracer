@@ -38,7 +38,54 @@ macro_rules! log {
 }
 
 #[wasm_bindgen]
-pub struct RayTracer {
+pub struct RayTracerApp {
+    scene_desc: Option<SceneDescription>,
+    raytracer: Option<RayTracer>,
+}
+
+#[wasm_bindgen]
+impl RayTracerApp {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Self {
+        Self {
+            scene_desc: None,
+            raytracer: None,
+        }
+    }
+
+    #[wasm_bindgen]
+    pub fn parse_scene(&mut self, scene_json: String) -> Result<JsValue, JsValue> {
+        let scene_desc = SceneDescription::from_json(&scene_json).map_err(err_to_js)?;
+        
+        // Convert data_needed to a JS array to return to JavaScript
+        let paths = js_sys::Array::new();
+        for path in &scene_desc.data_needed {
+            paths.push(&JsValue::from_str(path));
+        }
+        
+        self.scene_desc = Some(scene_desc);
+        Ok(paths.into())
+    }
+
+    #[wasm_bindgen]
+    pub fn is_ready(&self) -> bool {
+        self.raytracer.is_some()
+    }
+
+    #[wasm_bindgen]
+    pub fn get_needed_resources(&self) -> Option<js_sys::Array> {
+        self.scene_desc.as_ref().map(|desc| {
+            let paths = js_sys::Array::new();
+            for path in &desc.data_needed {
+                paths.push(&JsValue::from_str(path));
+            }
+            paths
+        })
+    }
+}
+
+#[wasm_bindgen]
+struct RayTracer {
     pub complete: bool,
     next_pixel: (u32, u32),
     scene: SceneGraph,
@@ -53,12 +100,16 @@ pub struct RayTracer {
 #[wasm_bindgen]
 impl RayTracer {
     #[wasm_bindgen]
-    pub fn init(
-        canvas_id: String,
-        scene_json: String,
+    pub fn initialize(
+        &mut self,
+        canvas_id: String, 
         raytracer_args: JsValue,
         scene_data_js: JsValue,
     ) -> Promise {
+        let scene_desc = match self.scene_desc.take() {
+            Some(desc) => desc,
+            None => return Promise::reject(&JsValue::from_str("Scene description not parsed yet")),
+        };
         future_to_promise(async move {
             let document = web_sys::window().unwrap().document().unwrap();
             let canvas = match document.get_element_by_id(&canvas_id) {
@@ -68,8 +119,6 @@ impl RayTracer {
 
             // Parse the raytrace args from JSON
             let args: RayTracerArgs = serde_wasm_bindgen::from_value(raytracer_args)?;
-
-            let scene_desc = SceneDescription::from_json(&scene_json).map_err(err_to_js)?;
 
             #[cfg(debug_assertions)]
             log!("{:#?}", scene_desc);
@@ -231,7 +280,7 @@ impl RayTracer {
             )
             .map_err(err_to_js)?;
 
-            Ok(JsValue::from(RayTracer {
+            self.raytracer = Some(RayTracer {
                 complete: false,
                 next_pixel: (0, 0),
                 scene: scene_graph,
@@ -241,18 +290,24 @@ impl RayTracer {
                 context,
                 texture: None,
                 background_texture: None,
-            }))
+            });
+            
+            Ok(JsValue::undefined())
         })
     }
 
     #[wasm_bindgen]
     pub fn raytrace_next_pixels(&mut self, num_pixels: u32) -> Promise {
+        let raytracer = match self.raytracer.as_mut() {
+            Some(rt) => rt,
+            None => return Promise::reject(&JsValue::from_str("Raytracer not initialized")),
+        };
         let mut count = 0;
         let (mut i, mut j) = self.next_pixel;
         let mut pixels: Vec<(u32, u32)> = Vec::with_capacity(num_pixels as usize);
 
-        while i < self.fb.width && count < num_pixels {
-            while j < self.fb.height && count < num_pixels {
+        while i < raytracer.fb.width && count < num_pixels {
+            while j < raytracer.fb.height && count < num_pixels {
                 pixels.push((i, j));
 
                 count += 1;
