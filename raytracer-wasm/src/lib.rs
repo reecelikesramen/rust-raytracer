@@ -8,7 +8,7 @@ use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{
     Request, RequestInit, RequestMode, Response, WebGl2RenderingContext, WebGlContextAttributes,
-    WebGlProgram, WebGlShader,
+    WebGlProgram, WebGlShader, WebGlTexture,
 };
 
 pub use wasm_bindgen_rayon::init_thread_pool;
@@ -44,13 +44,15 @@ macro_rules! log {
 
 #[wasm_bindgen]
 pub struct RayTracer {
+    pub complete: bool,
+    next_pixel: (u32, u32),
     scene: SceneGraph,
     fb: Arc<Framebuffer>,
-    sqrt_rays_per_pixel: u16,
+    pub sqrt_rays_per_pixel: u16,
     antialias_method: raytracer_lib::AntialiasMethod,
-    next_pixel: (u32, u32),
-    pub complete: bool,
     context: WebGl2RenderingContext,
+    texture: Option<WebGlTexture>,
+    background_texture: Option<WebGlTexture>,
 }
 
 #[wasm_bindgen]
@@ -96,6 +98,7 @@ impl RayTracer {
 
                 let context_attributes = WebGlContextAttributes::new();
                 context_attributes.set_alpha(true);
+                context_attributes.set_premultiplied_alpha(false);
                 context_attributes.set_antialias(true);
 
                 context_attributes
@@ -150,8 +153,8 @@ impl RayTracer {
             in vec2 texCoord;
             out vec4 fragColor;
             void main() {
-                vec3 color = texture(tex, texCoord).rgb;
-                fragColor = vec4(color, 1.0);
+                vec4 color = texture(tex, texCoord);
+                fragColor = color;
             }
             "#,
                 )?;
@@ -187,6 +190,13 @@ impl RayTracer {
                 );
                 context.enable_vertex_attrib_array(position_attrib);
 
+                // Handle transparency
+                context.enable(WebGl2RenderingContext::BLEND);
+                context.blend_func(
+                    WebGl2RenderingContext::SRC_ALPHA,
+                    WebGl2RenderingContext::ONE_MINUS_SRC_ALPHA,
+                );
+
                 context
             };
 
@@ -208,13 +218,15 @@ impl RayTracer {
             .map_err(err_to_js)?;
 
             Ok(JsValue::from(RayTracer {
+                complete: false,
+                next_pixel: (0, 0),
                 scene: scene_graph,
                 fb: Arc::new(Framebuffer::new(args.width, args.height)),
                 sqrt_rays_per_pixel,
                 antialias_method,
-                next_pixel: (0, 0),
-                complete: false,
                 context,
+                texture: None,
+                background_texture: None,
             }))
         })
     }
@@ -223,76 +235,78 @@ impl RayTracer {
     pub fn raytrace_next_pixels(&mut self, num_pixels: u32) -> Promise {
         let mut count = 0;
         let (mut i, mut j) = self.next_pixel;
+        let mut pixels: Vec<(u32, u32)> = Vec::with_capacity(num_pixels as usize);
 
-        while i < self.scene.image_width && count < num_pixels {
-            while j < self.scene.image_height && count < num_pixels {
-                render_pixel(
-                    self.fb.clone(),
-                    &self.scene,
-                    self.sqrt_rays_per_pixel,
-                    self.antialias_method,
-                    i,
-                    j,
-                );
+        while i < self.fb.width && count < num_pixels {
+            while j < self.fb.height && count < num_pixels {
+                pixels.push((i, j));
 
                 count += 1;
                 j += 1;
             }
 
-            if j >= self.scene.image_height {
+            if j >= self.fb.height {
                 j = 0;
                 i += 1;
             }
         }
 
+        pixels.into_par_iter().for_each(|(i, j)| {
+            render_pixel(
+                self.fb.clone(),
+                &self.scene,
+                self.sqrt_rays_per_pixel,
+                self.antialias_method,
+                i,
+                j,
+            );
+        });
+
         self.next_pixel = (i, j);
 
         // Check if we've completed the entire image
-        if i >= self.scene.image_width {
+        if i >= self.fb.width {
             self.complete = true;
         }
 
         // Calculate total pixels processed
         let total_pixels = if self.complete {
-            (self.scene.image_width * self.scene.image_height) as f64
+            (self.fb.width * self.fb.height) as f64
         } else {
-            (i * self.scene.image_height + j) as f64
+            (i * self.fb.height + j) as f64
         };
 
         Promise::resolve(&JsValue::from_f64(total_pixels))
     }
 
     #[wasm_bindgen]
-    pub fn raytrace_parallel(&mut self) -> Promise {
-        #[cfg(debug_assertions)]
-        console_error_panic_hook::set_once();
-
-        let fb = self.fb.clone();
-        let scene = &self.scene;
-        let width = scene.image_width;
-        let height = scene.image_height;
-        let sqrt_rays = self.sqrt_rays_per_pixel;
-        let aa_method = self.antialias_method;
-
-        (0..width).into_par_iter().for_each(move |i| {
-            for j in 0..height {
-                render_pixel(fb.clone(), scene, sqrt_rays, aa_method, i, j);
-            }
-        });
-
-        self.complete = true;
-        Promise::resolve(&JsValue::undefined())
+    pub fn rescan(&mut self) {
+        self.next_pixel = (0, 0);
+        self.complete = false;
     }
 
     #[wasm_bindgen]
-    pub fn render_to_canvas(&self) -> Result<(), JsValue> {
-        let texture = self
-            .context
-            .create_texture()
-            .ok_or("Failed to create texture")?;
+    pub fn set_dimensions(&mut self, width: u32, height: u32) {
+        self.fb = Arc::new(Framebuffer::new(width, height));
 
+        // Delete background old texture
+        if let Some(tex) = self.background_texture.take() {
+            self.context.delete_texture(Some(&tex));
+        }
+
+        // Move previous foreground texture to background texture
+        self.background_texture = self.texture.take();
+
+        // Create new foreground texture
+        self.texture = Some(
+            self.context
+                .create_texture()
+                .expect("Failed to create texture"),
+        );
+
+        // Bind foreground texture
         self.context
-            .bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(&texture));
+            .bind_texture(WebGl2RenderingContext::TEXTURE_2D, self.texture.as_ref());
 
         // Set texture parameters
         self.context.tex_parameteri(
@@ -306,40 +320,82 @@ impl RayTracer {
             WebGl2RenderingContext::NEAREST as i32,
         );
 
-        unsafe {
-            // Upload pixels to texture
-            let pixels_guard = self.fb.get_pixels();
-            // convert to sRGB space
-            let pixels: Vec<[f32; 3]> = pixels_guard
-                .iter()
-                .map(|pixel| {
-                    let r = pixel[0].powf(1. / 2.2);
-                    let g = pixel[1].powf(1. / 2.2);
-                    let b = pixel[2].powf(1. / 2.2);
-                    [r, g, b]
-                })
-                .collect();
-            let pixels: &[f32] =
-                std::slice::from_raw_parts(pixels.as_ptr() as *const f32, pixels.len() * 3);
+        self.rescan();
+    }
 
-            let pixels_array = Float32Array::view(pixels);
+    #[wasm_bindgen]
+    pub fn render_to_canvas(&self) -> Result<(), JsValue> {
+        // Clear canvas
+        self.context.clear_color(0.0, 0.0, 0.0, 1.0);
+        self.context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
+
+        // Exit if no texture
+        if self.texture.is_none() {
+            return Ok(());
+        }
+
+        // If background texture, bind and draw
+        if let Some(tex) = self.background_texture.as_ref() {
+            self.context
+                .bind_texture(WebGl2RenderingContext::TEXTURE_2D, Some(tex));
+
+            // Draw full-screen quad
+            self.context
+                .draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, 6);
+        }
+
+        // bind foreground texture
+        self.context
+            .bind_texture(WebGl2RenderingContext::TEXTURE_2D, self.texture.as_ref());
+
+        // process frame buffer data into pixels
+        let pixels: Vec<[f32; 4]> = {
+            let pixels_guard = self.fb.pixels.read().expect("Failed to lock pixels");
+            let samples_guard = self.fb.samples.read().expect("Failed to lock samples");
+
+            pixels_guard
+                .iter()
+                .zip(samples_guard.iter())
+                .map(|(p, &s)| {
+                    if s > 0 {
+                        let s = s as f32;
+                        [
+                            (p[0] / s).clamp(0., 1.).powf(1.0 / 2.2),
+                            (p[1] / s).clamp(0., 1.).powf(1.0 / 2.2),
+                            (p[2] / s).clamp(0., 1.).powf(1.0 / 2.2),
+                            1.0,
+                        ]
+                    } else {
+                        [0.0, 0.0, 0.0, 0.0]
+                    }
+                })
+                .collect()
+        };
+
+        // Upload pixels to texture
+        unsafe {
+            // View over pixels
+            let pixels_view = Float32Array::view(std::slice::from_raw_parts(
+                pixels.as_ptr() as *const f32,
+                pixels.len() * 4,
+            ));
+
+            // Bind texture and upload pixels
             self.context
                 .tex_image_2d_with_i32_and_i32_and_i32_and_format_and_type_and_opt_array_buffer_view(
                     WebGl2RenderingContext::TEXTURE_2D,
                     0,
-                    WebGl2RenderingContext::RGB32F as i32,
-                    self.scene.image_width as i32,
-                    self.scene.image_height as i32,
+                    WebGl2RenderingContext::RGBA32F as i32,
+                    self.fb.width as i32,
+                    self.fb.height as i32,
                     0,
-                    WebGl2RenderingContext::RGB,
+                    WebGl2RenderingContext::RGBA,
                     WebGl2RenderingContext::FLOAT,
-                    Some(&pixels_array),
+                    Some(&pixels_view),
                 )?;
         }
 
         // Draw full-screen quad
-        self.context.clear_color(0.0, 0.0, 0.0, 1.0);
-        self.context.clear(WebGl2RenderingContext::COLOR_BUFFER_BIT);
         self.context
             .draw_arrays(WebGl2RenderingContext::TRIANGLES, 0, 6);
 
@@ -401,10 +457,6 @@ async fn fetch_data(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     let opts = RequestInit::new();
     opts.set_method("GET");
     opts.set_mode(RequestMode::Cors);
-
-    let js_to_err = |err: JsValue| -> Box<dyn std::error::Error> {
-        JsString::from(err).as_string().unwrap().into()
-    };
 
     let request = Request::new_with_str_and_init(url, &opts).map_err(js_to_err)?;
 
