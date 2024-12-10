@@ -5,17 +5,12 @@ use rayon::prelude::*;
 use raytracer_lib::{public_consts, render_pixel, Framebuffer, Real, SceneDescription, SceneGraph};
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::{future_to_promise, JsFuture};
+use wasm_bindgen_futures::future_to_promise;
 use web_sys::{
-    Request, RequestInit, RequestMode, Response, WebGl2RenderingContext, WebGlContextAttributes,
-    WebGlProgram, WebGlShader, WebGlTexture,
+    WebGl2RenderingContext, WebGlContextAttributes, WebGlProgram, WebGlShader, WebGlTexture,
 };
 
 pub use wasm_bindgen_rayon::init_thread_pool;
-
-fn js_to_err(err: JsValue) -> Box<dyn std::error::Error> {
-    JsString::from(err).as_string().unwrap().into()
-}
 
 fn err_to_js(err: Box<dyn std::error::Error>) -> JsValue {
     JsString::from(err.to_string()).into()
@@ -58,7 +53,12 @@ pub struct RayTracer {
 #[wasm_bindgen]
 impl RayTracer {
     #[wasm_bindgen]
-    pub fn init(canvas_id: String, scene_json: String, raytracer_args: JsValue, scene_data_js: JsValue) -> Promise {
+    pub fn init(
+        canvas_id: String,
+        scene_json: String,
+        raytracer_args: JsValue,
+        scene_data_js: JsValue,
+    ) -> Promise {
         future_to_promise(async move {
             let document = web_sys::window().unwrap().document().unwrap();
             let canvas = match document.get_element_by_id(&canvas_id) {
@@ -206,14 +206,18 @@ impl RayTracer {
 
             // Get all the entries from the JS object
             for relative_path in &scene_desc.data_needed {
-                if let Ok(Some(array)) = js_sys::Reflect::get(&js_obj, &JsValue::from_str(relative_path))
-                    .map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
+                if let Ok(Some(array)) =
+                    js_sys::Reflect::get(&js_obj, &JsValue::from_str(relative_path))
+                        .map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
                 {
                     let mut bytes = vec![0; array.length() as usize];
                     array.copy_to(&mut bytes);
                     scene_data.insert(relative_path.clone(), bytes);
                 } else {
-                    return Err(JsValue::from_str(&format!("Missing or invalid data for path: {}", relative_path)));
+                    return Err(JsValue::from_str(&format!(
+                        "Missing or invalid data for path: {}",
+                        relative_path
+                    )));
                 }
             }
 
@@ -462,7 +466,6 @@ fn link_program(
             .unwrap_or_else(|| String::from("Unknown error creating program")))
     }
 }
-
 
 #[cfg(debug_assertions)]
 fn test_webgl2() -> Result<(), JsValue> {
