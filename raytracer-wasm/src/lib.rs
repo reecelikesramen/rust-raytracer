@@ -58,7 +58,7 @@ pub struct RayTracer {
 #[wasm_bindgen]
 impl RayTracer {
     #[wasm_bindgen]
-    pub fn init(canvas_id: String, scene_json: String, raytracer_args: JsValue) -> Promise {
+    pub fn init(canvas_id: String, scene_json: String, raytracer_args: JsValue, scene_data_js: JsValue) -> Promise {
         future_to_promise(async move {
             let document = web_sys::window().unwrap().document().unwrap();
             let canvas = match document.get_element_by_id(&canvas_id) {
@@ -200,11 +200,21 @@ impl RayTracer {
                 context
             };
 
-            // fetch data from IndexedDB
+            // Get data from JS object
             let mut scene_data: HashMap<String, Vec<u8>> = HashMap::new();
+            let js_obj = js_sys::Object::from(scene_data_js);
+
+            // Get all the entries from the JS object
             for relative_path in &scene_desc.data_needed {
-                let bytes = fetch_data(relative_path).await.map_err(err_to_js)?;
-                scene_data.insert(relative_path.clone(), bytes);
+                if let Ok(Some(array)) = js_sys::Reflect::get(&js_obj, &JsValue::from_str(relative_path))
+                    .map(|v| v.dyn_into::<js_sys::Uint8Array>().ok())
+                {
+                    let mut bytes = vec![0; array.length() as usize];
+                    array.copy_to(&mut bytes);
+                    scene_data.insert(relative_path.clone(), bytes);
+                } else {
+                    return Err(JsValue::from_str(&format!("Missing or invalid data for path: {}", relative_path)));
+                }
             }
 
             let scene_graph = SceneGraph::from_description(
@@ -453,29 +463,6 @@ fn link_program(
     }
 }
 
-async fn fetch_data(url: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let opts = RequestInit::new();
-    opts.set_method("GET");
-    opts.set_mode(RequestMode::Cors);
-
-    let request = Request::new_with_str_and_init(url, &opts).map_err(js_to_err)?;
-
-    let window = web_sys::window().unwrap();
-    let resp_value = JsFuture::from(window.fetch_with_request(&request))
-        .await
-        .map_err(js_to_err)?;
-    let resp: Response = resp_value.dyn_into().map_err(js_to_err)?;
-
-    // Get the response as ArrayBuffer
-    let buf = JsFuture::from(resp.array_buffer().map_err(js_to_err)?)
-        .await
-        .map_err(js_to_err)?;
-    let uint8_array = js_sys::Uint8Array::new(&buf);
-    let mut bytes = vec![0; uint8_array.length() as usize];
-    uint8_array.copy_to(&mut bytes);
-
-    Ok(bytes)
-}
 
 #[cfg(debug_assertions)]
 fn test_webgl2() -> Result<(), JsValue> {
