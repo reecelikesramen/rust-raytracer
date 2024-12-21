@@ -4,6 +4,24 @@
 <head>
     <meta charset="utf-8">
     <title>Raytracer WASM Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+        
+        /* Always a square, dynamically sized to be 60vh or 60vw, whichever is less */
+        #canvas {
+            width: 60vh;
+            height: 60vh;
+            max-width: 60vw;
+            max-height: 60vw;
+            display: block;
+            margin: 0 auto;
+            image-rendering: pixelated;
+        }
+    </style>
 </head>
 
 <body>

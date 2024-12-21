@@ -1,41 +1,45 @@
 import init, { RayTracer, initThreadPool } from "./pkg/raytracer_wasm.js"
 import { threads } from "wasm-feature-detect"
 
+let pixels_per_chunk = 40 // start amount
+
 /**
  *
- * @param {RayTracer} processor
+ * @param {RayTracer} raytracer
  */
-async function runChunkedProcessingWithRAF(processor) {
+function runChunkedProcessingWithRAF(raytracer) {
   return new Promise((resolve) => {
-    let pixels_per_chunk = 10
-    const TARGET_MIN = 80 // ms
-    const TARGET_MAX = 120 // ms
-    const TARGET_MID = (TARGET_MIN + TARGET_MAX) / 2 // 50ms
+    const TARGET_MS_MIN = 1000 / 8.5
+    const TARGET_MS_MAX = 1000 / 7.5
+    const TARGET_MS_MID = (TARGET_MS_MIN + TARGET_MS_MAX) / 2
+
+    // Animation loop
     const processNextChunk = async (start_time) => {
-      if (!processor.complete) {
-        const progress = await processor.raytrace_next_pixels(pixels_per_chunk)
-        let elapsed = performance.now() - start_time
+      // Resolve promise when complete
+      if (raytracer.complete) {
+        raytracer.render_to_canvas()
+        return resolve()
+      }
 
-        // Proportional control with dampening
-        if (elapsed < TARGET_MIN) {
-          // Below target - increase chunk size proportionally to how far we are from target
-          const adjustment = 1 + 0.5 * ((TARGET_MIN - elapsed) / TARGET_MIN)
-          pixels_per_chunk = Math.ceil(pixels_per_chunk * adjustment)
-        } else if (elapsed > TARGET_MAX) {
-          // Above target - decrease chunk size proportionally to how far we are from target
-          const adjustment = 1 - 0.5 * ((elapsed - TARGET_MAX) / TARGET_MAX)
-          pixels_per_chunk = Math.max(1, Math.floor(pixels_per_chunk * adjustment))
-        } else {
-          // Within target range - make minor adjustments towards the middle
-          const adjustment = 1 + 0.1 * ((TARGET_MID - elapsed) / TARGET_MID)
-          pixels_per_chunk = Math.round(pixels_per_chunk * adjustment)
-        }
+      // Request compute time
+      requestAnimationFrame(processNextChunk)
 
-        // Use requestAnimationFrame instead of setTimeout
-        processor.render_to_canvas()
-        requestAnimationFrame(processNextChunk)
+      const progress = await raytracer.raytrace_next_pixels(pixels_per_chunk)
+      let elapsed = performance.now() - start_time
+
+      // Proportional control with dampening
+      if (elapsed < TARGET_MS_MIN) {
+        // Below target - increase chunk size proportionally to how far we are from target
+        const adjustment = 1 + 0.5 * ((TARGET_MS_MIN - elapsed) / TARGET_MS_MIN)
+        pixels_per_chunk = Math.ceil(pixels_per_chunk * adjustment)
+      } else if (elapsed > TARGET_MS_MAX) {
+        // Above target - decrease chunk size proportionally to how far we are from target
+        const adjustment = 1 - 0.5 * ((elapsed - TARGET_MS_MAX) / TARGET_MS_MAX)
+        pixels_per_chunk = Math.max(1, Math.floor(pixels_per_chunk * adjustment))
       } else {
-        resolve()
+        // Within target range - make minor adjustments towards the middle
+        const adjustment = 1 + 0.1 * ((TARGET_MS_MID - elapsed) / TARGET_MS_MID)
+        pixels_per_chunk = Math.round(pixels_per_chunk * adjustment)
       }
     }
 
@@ -51,18 +55,18 @@ let render_to_canvas_id
  */
 function start_render_to_canvas(raytracer) {
   const PERIOD = 1000 / 30
-  let last_frame_time = performance.now() - PERIOD
+  let last_frame_time = 0
   function animate(current_time) {
+    // Request the next frame
+    render_to_canvas_id = requestAnimationFrame(animate)
+
     if (current_time - last_frame_time < PERIOD) {
       return
     }
 
-    raytracer.render_to_canvas()
-
     last_frame_time = current_time
 
-    // Request the next frame
-    render_to_canvas_id = requestAnimationFrame(animate)
+    raytracer.render_to_canvas()
   }
 
   // Start the animation
@@ -73,11 +77,7 @@ function stop_render_to_canvas() {
   cancelAnimationFrame(render_to_canvas_id)
 }
 
-let start = false
-
 ;(async function run() {
-  Error.stackTraceLimit = 30
-
   // Initialize the WASM module
   await init()
 
@@ -90,48 +90,67 @@ let start = false
 
   await initThreadPool(navigator.hardwareConcurrency)
 
-  const width = 600
-  const height = 600
+  const width = 800
+  const height = 800
 
   const canvas = document.getElementById("canvas")
-  canvas.style.width = "600px"
-  canvas.style.height = "600px"
+
+  let stop = false
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      stop = true
+    }
+  })
 
   // Fetch ./scenes/sphere_scene.json into a string
-  const scene_json = await fetch("./scenes/spheres.json").then((r) => r.text())
+  const scene_json = await fetch("./scenes/cornell_room_quad.json").then((r) => r.text())
 
   const scene_args = {
     width,
     height,
-    rays_per_pixel: 100,
+    rays_per_pixel: 25,
   }
 
   try {
     const raytracer = await RayTracer.init("canvas", scene_json, scene_args)
     console.log("Initialized raytracer")
 
-    // render black canvas
-    raytracer.render_to_canvas()
-
     // start periodic rendering
     start_render_to_canvas(raytracer)
 
+    // run quarter resolution
+    let date_start = performance.now()
+    raytracer.set_dimensions(Math.floor(120), Math.floor((120 * height) / width))
+    raytracer.sqrt_rays_per_pixel = 20
+    await runChunkedProcessingWithRAF(raytracer)
+    console.log("Quarter raytrace in", (performance.now() - date_start).toFixed(2), "ms!")
+
     // parallel processing using rayon
+    raytracer.set_dimensions(width, height)
+    raytracer.sqrt_rays_per_pixel = Math.floor(Math.sqrt(scene_args.rays_per_pixel))
+    await new Promise((resolve) => setTimeout(resolve, 1000))
     console.log("Starting raytrace...")
-    const date_start = performance.now()
-    await raytracer.raytrace_parallel()
-    // let i = await raytracer.test_rayon()
-    // console.log(i)
+    date_start = performance.now()
 
-    // stop periodic rendering
-    stop_render_to_canvas()
+    // progressively run full resolution
+    let scans = 0
+    while (scans < 5) {
+      await runChunkedProcessingWithRAF(raytracer)
+      scans++
 
-    // render final image to canvas
-    raytracer.render_to_canvas()
+      if (stop && raytracer.complete) {
+        console.log("Stopped raytracing after", scans * scene_args.rays_per_pixel, "rays per pixel")
+        break
+      }
+
+      raytracer.rescan()
+    }
 
     // log time
-    const time_elapsed = performance.now() - date_start
-    console.log("Raytraced the scene in", time_elapsed.toFixed(2), "ms!")
+    console.log("Raytraced the scene in", (performance.now() - date_start).toFixed(2), "ms!")
+
+    // stop periodic rendering and render final image to canvas
+    stop_render_to_canvas()
   } catch (e) {
     console.error("Error rendering scene:", e)
   }
