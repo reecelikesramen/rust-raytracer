@@ -1,10 +1,13 @@
-use crate::prelude::*;
+use crate::{hit_record::HitRecord, material::Material, prelude::*};
+
+use std::{fmt::Debug, sync::Arc};
 
 mod bbox;
 mod bvh;
 mod cuboid;
 mod instance;
 mod mesh;
+mod quad;
 mod sphere;
 mod triangle;
 
@@ -13,23 +16,12 @@ pub use bvh::BVH;
 pub use cuboid::Cuboid;
 pub use instance::Instance;
 pub use mesh::Mesh;
+pub use quad::Quad;
 pub use sphere::Sphere;
 pub use triangle::Triangle;
 
-pub enum ShapeType {
-    Sphere,
-    Box,
-    Triangle,
-    Mesh,
-    Instance,
-    Plane,
-}
-
-pub trait Shape: Send + Sync + std::fmt::Debug {
-    fn get_type(&self) -> ShapeType;
-    fn get_name(&self) -> &str;
-    fn get_bbox(&self) -> &bbox::BBox;
+pub trait Shape: Send + Sync + Debug {
+    fn get_bbox(&self) -> &BBox;
     fn get_centroid(&self) -> P3;
-    fn get_shader(&self) -> std::sync::Arc<dyn crate::shader::Shader>;
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool;
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool;
 }

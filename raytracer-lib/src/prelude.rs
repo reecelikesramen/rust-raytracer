@@ -22,6 +22,12 @@ pub type P3 = na::Point3<Real>;
 #[derive(Debug)]
 pub struct W<T>(pub T);
 
+/// Alias for errors
+pub type Error = Box<dyn std::error::Error>;
+
+/// Alias for results
+pub type Result<T> = std::result::Result<T, Error>;
+
 #[macro_export]
 macro_rules! color {
     ($x:expr, $y:expr, $z:expr) => {
@@ -39,21 +45,24 @@ mod constants {
     pub(crate) static DEFAULT_IMAGE_PLANE_WIDTH: Real = 0.5;
     pub(crate) static ERROR_COLOR: Color = color!(1.0, 0.0, 1.0);
     pub(crate) static DEFAULT_BACKGROUND_COLOR: Color = color!(0.198, 0.198, 0.198);
-    pub(crate) static VERY_SMALL_NUMBER: Real = 1e-6;
     pub(crate) static DEFAULT_CAMERA: &str = "main";
 
     #[cfg(feature = "f64")]
     pub(crate) static PI: Real = std::f64::consts::PI;
     #[cfg(feature = "f32")]
     pub(crate) static PI: Real = std::f32::consts::PI;
+    #[cfg(feature = "f64")]
+    pub(crate) static VERY_SMALL_NUMBER: Real = 1e-10;
+    #[cfg(feature = "f32")]
+    pub(crate) static VERY_SMALL_NUMBER: Real = 1e-6;
 }
 
 pub mod public_consts {
     use crate::AntialiasMethod;
 
-    pub static DEFAULT_IMAGE_WIDTH: u32 = 360;
-    pub static DEFAULT_IMAGE_HEIGHT: u32 = 360;
-    pub static DEFAULT_RAYS_PER_PIXEL: u16 = 4;
-    pub static DEFAULT_RECURSION_DEPTH: u16 = 3;
+    pub static DEFAULT_IMAGE_WIDTH: u32 = 500;
+    pub static DEFAULT_IMAGE_HEIGHT: u32 = 500;
+    pub static DEFAULT_RAYS_PER_PIXEL: u16 = 36;
+    pub static DEFAULT_RECURSION_DEPTH: u16 = 10;
     pub static DEFAULT_ANTIALIAS_METHOD: AntialiasMethod = AntialiasMethod::Normal;
 }

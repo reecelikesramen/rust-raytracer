@@ -1,41 +1,15 @@
-use std::sync::Arc;
-
-use tobj::load_obj;
-
-use crate::{prelude::*, shader::Shader};
-
-use super::{BBox, Shape, Triangle, BVH};
+use super::*;
+use tobj::Model;
 
 #[derive(Debug)]
 pub struct Mesh {
     bvh: BVH,
     bbox: BBox,
-    shader: Arc<dyn Shader>,
-    name: &'static str,
+    material: Arc<dyn Material>,
 }
 
 impl Mesh {
-    pub fn new(model_path: String, shader: Arc<dyn Shader>, name: &'static str) -> Self {
-        let (models, _) = load_obj(
-            model_path,
-            &tobj::LoadOptions {
-                triangulate: true,
-                ..Default::default()
-            },
-        )
-        .expect("Failed to load model for mesh");
-
-        if models.len() != 1 {
-            panic!(
-                "expected exactly one model, found {} for mesh {}",
-                models.len(),
-                name
-            );
-        }
-
-        // take ownership of the model from the Vec
-        let model = models.into_iter().next().unwrap();
-
+    pub fn new(model: Model, material: Arc<dyn Material>) -> Self {
         let positions = model
             .mesh
             .positions
@@ -51,8 +25,7 @@ impl Mesh {
                     positions[i[0] as usize],
                     positions[i[1] as usize],
                     positions[i[2] as usize],
-                    shader.clone(),
-                    name,
+                    material.clone(),
                 )) as Arc<dyn Shape>
             })
             .collect::<Vec<Arc<dyn Shape>>>();
@@ -61,21 +34,12 @@ impl Mesh {
         Self {
             bvh,
             bbox,
-            shader,
-            name,
+            material,
         }
     }
 }
 
 impl Shape for Mesh {
-    fn get_type(&self) -> super::ShapeType {
-        super::ShapeType::Mesh
-    }
-
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
     fn get_bbox(&self) -> &BBox {
         &self.bbox
     }
@@ -84,11 +48,21 @@ impl Shape for Mesh {
         self.bbox.centroid
     }
 
-    fn get_shader(&self) -> Arc<dyn Shader> {
-        self.shader.clone()
-    }
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
+        let did_hit = self.bvh.closest_hit(hit_record);
 
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
-        self.bvh.closest_hit(hit)
+        // Return false if no intersection
+        if !did_hit {
+            return false;
+        }
+
+        // Set the material
+        hit_record
+            .hit_data
+            .as_mut()
+            .expect("Hit record should have hit data")
+            .material = self.material.clone();
+
+        true
     }
 }

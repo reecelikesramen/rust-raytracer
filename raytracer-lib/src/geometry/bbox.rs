@@ -12,6 +12,17 @@ pub struct BBox {
 
 impl BBox {
     pub fn new(min: P3, max: P3) -> BBox {
+        // Make sure the bounding box is not degenerate
+        let mut max = max;
+        if (min.x - max.x).abs() < VERY_SMALL_NUMBER {
+            max.x += VERY_SMALL_NUMBER;
+        }
+        if (min.y - max.y).abs() < VERY_SMALL_NUMBER {
+            max.y += VERY_SMALL_NUMBER;
+        }
+        if (min.z - max.z).abs() < VERY_SMALL_NUMBER {
+            max.z += VERY_SMALL_NUMBER;
+        }
         BBox {
             min,
             max,
@@ -21,18 +32,17 @@ impl BBox {
     }
 
     pub fn combine(b1: &BBox, b2: &BBox) -> BBox {
-        BBox::new(
-            P3::new(
-                b1.min.x.min(b2.min.x),
-                b1.min.y.min(b2.min.y),
-                b1.min.z.min(b2.min.z),
-            ),
-            P3::new(
-                b1.max.x.max(b2.max.x),
-                b1.max.y.max(b2.max.y),
-                b1.max.z.max(b2.max.z),
-            ),
-        )
+        BBox::from_points(&[b1.min, b1.max, b2.min, b2.max])
+    }
+
+    pub fn from_points(points: &[P3]) -> BBox {
+        let mut min = points[0];
+        let mut max = points[0];
+        for point in points.iter() {
+            min = P3::new(min.x.min(point.x), min.y.min(point.y), min.z.min(point.z));
+            max = P3::new(max.x.max(point.x), max.y.max(point.y), max.z.max(point.z));
+        }
+        BBox::new(min, max)
     }
 
     pub fn transform(&self, transform: &Matrix4<Real>) -> BBox {

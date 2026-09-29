@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 raytracer-lib = { path = "../raytracer-lib", features = ["f64"] }
-wasm-bindgen = "0.2.95"
+wasm-bindgen = { version = "0.2.99", features = ["serde-serialize"] }
 serde_json = "1.0.132"
 serde = { version = "1.0.215", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
@@ -21,11 +21,19 @@ web-sys = { version = "0.3", features = [
     "WebGlProgram",
     "WebGlShader",
     "WebGlBuffer",
-    "WebGlTexture"
+    "WebGlTexture",
+    "Request",
+    "Response",
+    "RequestInit",
+    "RequestMode",
+    "OffscreenCanvas",
 ]}
 js-sys = "0.3"
 futures = "0.3.31"
-wasm-bindgen-futures = "0.4.45"
+wasm-bindgen-futures = ">=0.4.43"
+wasm-bindgen-rayon = "1.3.0"
+rayon = { version = "1.8.1", features = ["web_spin_lock"] }
+console_error_panic_hook = "0.1.7"
 
 [lib]
 crate-type = ["rlib", "cdylib"]  # To enable usage as a library in WASM

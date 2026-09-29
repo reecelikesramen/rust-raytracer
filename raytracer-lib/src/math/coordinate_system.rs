@@ -37,16 +37,6 @@ impl CoordinateSystem {
             position,
         }
     }
-
-    fn to_local(&self, global: P3) -> P3 {
-        let temp = global - self.position;
-
-        P3::new(self.u.dot(&temp), self.v.dot(&temp), self.w.dot(&temp))
-    }
-
-    fn to_global(&self, local: V3) -> P3 {
-        self.position + V3::new(self.u.dot(&local), self.v.dot(&local), self.w.dot(&local))
-    }
 }
 
 // Helper function to create a coordinate system from a normal

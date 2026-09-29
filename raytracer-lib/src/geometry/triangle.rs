@@ -1,56 +1,51 @@
-use std::sync::Arc;
+use crate::material::DEFAULT_MATERIAL;
 
+use super::*;
 use na::Unit;
-
-use crate::{prelude::*, shader::Shader, V3};
-
-use super::{bbox::BBox, Shape};
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct Triangle {
     a: P3,
     b: P3,
     c: P3,
-    normal: V3,
+    normal_a: V3,
+    normal_b: V3,
+    normal_c: V3,
     bbox: BBox,
-    shader: Arc<dyn Shader>,
-    name: &'static str,
+    material: Arc<dyn Material>,
 }
 
 impl Triangle {
-    pub fn new(a: P3, b: P3, c: P3, shader: Arc<dyn Shader>, name: &'static str) -> Self {
+    pub fn new(a: P3, b: P3, c: P3, material: Arc<dyn Material>) -> Self {
         let normal = (b - a).cross(&(c - a)).normalize();
-        let min = P3::new(
-            a.x.min(b.x).min(c.x),
-            a.y.min(b.y).min(c.y),
-            a.z.min(b.z).min(c.z),
-        );
-        let max = P3::new(
-            a.x.max(b.x).max(c.x),
-            a.y.max(b.y).max(c.y),
-            a.z.max(b.z).max(c.z),
-        );
         Self {
             a,
             b,
             c,
-            normal,
-            bbox: BBox::new(min, max),
-            shader,
-            name,
+            normal_a: normal,
+            normal_b: normal,
+            normal_c: normal,
+            bbox: BBox::from_points(&[a, b, c]),
+            material,
+        }
+    }
+
+    pub fn from_mesh(a: P3, b: P3, c: P3, normal_a: V3, normal_b: V3, normal_c: V3) -> Self {
+        Self {
+            a,
+            b,
+            c,
+            normal_a,
+            normal_b,
+            normal_c,
+            bbox: BBox::from_points(&[a, b, c]),
+            material: DEFAULT_MATERIAL.clone(),
         }
     }
 }
 
 impl Shape for Triangle {
-    fn get_type(&self) -> super::ShapeType {
-        super::ShapeType::Triangle
-    }
-
-    fn get_name(&self) -> &str {
-        self.name
-    }
-
     fn get_bbox(&self) -> &BBox {
         &self.bbox
     }
@@ -59,25 +54,21 @@ impl Shape for Triangle {
         P3::from((self.a.coords + self.b.coords + self.c.coords) / 3.0)
     }
 
-    fn get_shader(&self) -> Arc<dyn Shader> {
-        Arc::clone(&self.shader)
-    }
-
-    fn closest_hit<'hit>(&'hit self, hit: &mut crate::shader::Hit<'hit>) -> bool {
+    fn closest_hit(&self, hit_record: &mut HitRecord) -> bool {
         use na::Matrix3;
 
         // Create the matrices for Cramer's rule
         let ab = self.a - self.b;
         let ac = self.a - self.c;
-        let ao = self.a - hit.ray.origin;
-        let d = hit.ray.direction;
+        let ao = self.a - hit_record.ray.origin;
+        let d = hit_record.ray.direction;
 
         // Matrix A is common denominator for all calculations
         let matrix_a = Matrix3::from_columns(&[ab, ac, d]);
         let det_a = matrix_a.determinant();
 
         // Early exit if determinant is too close to zero (parallel to triangle)
-        if det_a.abs() < Real::EPSILON {
+        if det_a.abs() < VERY_SMALL_NUMBER {
             return false;
         }
 
@@ -87,7 +78,7 @@ impl Shape for Triangle {
         let intersect_t = det_t / det_a;
 
         // Check if intersection is within valid range
-        if intersect_t < hit.t_min || intersect_t > hit.t {
+        if intersect_t < hit_record.t_min || intersect_t > hit_record.t {
             return false;
         }
 
@@ -109,10 +100,16 @@ impl Shape for Triangle {
             return false;
         }
 
+        let normal =
+            (1.0 - beta - gamma) * self.normal_a + beta * self.normal_b + gamma * self.normal_c;
+
         // We have a valid hit, update the hit record
-        hit.t = intersect_t;
-        hit.normal = Unit::new_unchecked(self.normal);
-        hit.shape = Some(self);
+        hit_record.t = intersect_t;
+        hit_record.set_hit_data(
+            Unit::new_normalize(normal),
+            (beta, gamma),
+            self.material.clone(),
+        );
 
         true
     }
